@@ -1,85 +1,91 @@
+'''
+    open_house_scheduling.py
+    Cale Crowder
+    January 14, 2019
+
+    Attempts to schedule student-faculty interviews
+'''
+
+''' Imports'''
 from __future__ import division
 from __future__ import print_function
 from ortools.sat.python import cp_model
+import numpy as np
 
+''' Constants '''
+NUM_STUDENTS = 10
+NUM_PROFESSORS = 5
+NUM_INTERVIEWS = 3
+all_students = range(NUM_STUDENTS)
+all_professors = range(NUM_PROFESSORS)
+all_interviews = range(NUM_INTERVIEWS)
 
+MIN_INTERVIEWS = 1
+MAX_INTERVIEWS = NUM_PROFESSORS
 
+''' Randomly generate prefered matches for testing '''
+def define_random_matches():
+    pass
+
+''' Make the matches '''
 def main():
-    # This program tries to find an optimal assignment of nurses to shifts
-    # (3 shifts per day, for 7 days), subject to some constraints (see below).
-    # Each nurse can request to be assigned to specific shifts.
-    # The optimal assignment maximizes the number of fulfilled shift requests.
-    num_nurses = 5
-    num_shifts = 3
-    num_days = 7
-    all_nurses = range(num_nurses)
-    all_shifts = range(num_shifts)
-    all_days = range(num_days)
-    shift_requests = [[[0, 0, 1], [0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 1],
-                       [0, 1, 0], [0, 0, 1]],
-                      [[0, 0, 0], [0, 0, 0], [0, 1, 0], [0, 1, 0], [1, 0, 0],
-                       [0, 0, 0], [0, 0, 1]],
-                      [[0, 1, 0], [0, 1, 0], [0, 0, 0], [1, 0, 0], [0, 0, 0],
-                       [0, 1, 0], [0, 0, 0]],
-                      [[0, 0, 1], [0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 0],
-                       [1, 0, 0], [0, 0, 0]],
-                      [[0, 0, 0], [0, 0, 1], [0, 1, 0], [0, 0, 0], [1, 0, 0],
-                       [0, 1, 0], [0, 0, 0]]]
+    
     # Creates the model.
     model = cp_model.CpModel()
 
-    # Creates shift variables.
-    # shifts[(n, d, s)]: nurse 'n' works shift 's' on day 'd'.
-    shifts = {}
-    for n in all_nurses:
-        for d in all_days:
-            for s in all_shifts:
-                shifts[(n, d,
-                        s)] = model.NewBoolVar('shift_n%id%is%i' % (n, d, s))
 
-    # Each shift is assigned to exactly one nurse in .
-    for d in all_days:
-        for s in all_shifts:
-            model.Add(sum(shifts[(n, d, s)] for n in all_nurses) == 1)
 
-    # Each nurse works at most one shift per day.
-    for n in all_nurses:
-        for d in all_days:
-            model.Add(sum(shifts[(n, d, s)] for s in all_shifts) <= 1)
+    # Creates interview variables.
+    # interview[(p, s, i)]: professor 'p' interviews student 's' for interview number 'i'
+    interview = {}
+    for p in all_professors:
+        for s in all_students:
+            for i in all_interviews:
+                interview[(p, s,
+                        i)] = model.NewBoolVar('interview_n%id%is%i' % (p, s, i))
 
-    # min_shifts_assigned is the largest integer such that every nurse can be
-    # assigned at least that number of shifts.
-    min_shifts_per_nurse = (num_shifts * num_days) // num_nurses
-    max_shifts_per_nurse = min_shifts_per_nurse + 1
-    for n in all_nurses:
-        num_shifts_worked = sum(
-            shifts[(n, d, s)] for d in all_days for s in all_shifts)
-        model.Add(min_shifts_per_nurse <= num_shifts_worked)
-        model.Add(num_shifts_worked <= max_shifts_per_nurse)
+    # Each student has no more than one interview at a time
+    for p in all_professors:
+        for i in all_interviews:
+            model.Add(sum(interview[(p, s, i)] for s in all_students) <= 1)
 
-    model.Maximize(
-        sum(shift_requests[n][d][s] * shifts[(n, d, s)] for n in all_nurses
-            for d in all_days for s in all_shifts))
+    # Each professor has only one student per interview
+    for s in all_students:
+        for i in all_interviews:
+            model.Add(sum(shifts[(p, s, i)] for p in all_professors) <= 1)
+
+    # Ensure that no student or professor gets to many or too few interviews
+    for s in all_students:
+        num_interviews_stud = sum(
+            interview[(p, s, i)] for p in all_professors for i in all_interviews)
+        model.Add(MIN_INTERVIEWS <= num_interviews_stud)
+        model.Add(num_interviews_stud <= MAX_INTERVIEWS)
+    
+    for p in all_professors:
+        num_interviews_prof = sum(
+            interview[(p, s, i)] for s in all_students for i in all_interviews)
+        model.Add(MIN_INTERVIEWS <= num_interviews_prof)
+        model.Add(num_interviews_prof <= MAX_INTERVIEWS)
+    
+    # Define the minimization of cost
+    model.Minimize(
+        sum(interview[(p, s, i)] for p in all_professors 
+            for s in all_students for i in all_interview))
+    
     # Creates the solver and solve.
     solver = cp_model.CpSolver()
     solver.Solve(model)
-    for d in all_days:
-        print('Day', d)
-        for n in all_nurses:
-            for s in all_shifts:
-                if solver.Value(shifts[(n, d, s)]) == 1:
-                    if shift_requests[n][d][s] == 1:
-                        print('Nurse', n, 'works shift', s, '(requested).')
-                    else:
-                        print('Nurse', n, 'works shift', s, '(not requested).')
+    for i in all_interviews
+        print(shift_requests[:][:][i])
         print()
+    
 
     # Statistics.
-    print()
-    print('Statistics')
-    print('  - Number of shift requests met = %i' % solver.ObjectiveValue(),
-          '(out of', num_nurses * min_shifts_per_nurse, ')')
-    print('  - wall time       : %f ms' % solver.WallTime())
+    #print()
+    #print('Statistics')
+    #print('  - Number of shift requests met = %i' % solver.ObjectiveValue(),
+    #      '(out of', num_nurses * min_shifts_per_nurse, ')')
+    #print('  - wall time       : %f ms' % solver.WallTime())
 
 
 if __name__ == '__main__':
