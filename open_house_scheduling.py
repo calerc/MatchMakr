@@ -40,9 +40,7 @@ MAX_INTERVIEWS = 3
 class match_maker():
     
     def __init__(self):
-        self.faculty_weight = 1
-        self.student_weight = 1
-
+        self.faculty_advantage = 1
 
 
     ''' Load the data '''
@@ -95,8 +93,8 @@ class match_maker():
         
     def calc_cost_matrix(self):
         
-        self.cost_matrix = (self.faculty_weight * self.faculty_pref
-                              * self.student_weight * self.student_pref)
+        self.cost_matrix = ((self.faculty_weight + self.faculty_pref)
+                              * self.student_pref)
 
 
     ''' Randomly generate prefered matches for testing '''
