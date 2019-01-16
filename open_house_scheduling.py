@@ -39,7 +39,7 @@ class match_maker():
     def __init__(self):
         
         # Constants
-        self.FACULTY_ADVANTAGE = 80
+        self.FACULTY_ADVANTAGE = 50
         self.MIN_INTERVIEWS = 1
         self.MAX_INTERVIEWS = 3
         self.NUM_INTERVIEWS = 10
@@ -108,6 +108,7 @@ class match_maker():
         self.faculty_names = faculty_names
         self.student_names = student_names
         
+        
         # Get necessary statistics about the data
         self.num_students = len(self.student_names)
         self.num_faculty = len(self.faculty_names)
@@ -116,6 +117,15 @@ class match_maker():
         self.all_faculty = range(self.num_faculty)
        
         self.calc_cost_matrix()
+        
+        # Remove whitespace from names
+        for p in self.all_faculty:
+            self.faculty_names[p] = self.faculty_names[p].replace("'", "")
+            self.faculty_names[p] = self.faculty_names[p].replace(" ", "")
+            
+        for s in self.all_students:            
+            self.student_names[s] = self.student_names[s].replace("'", "")
+            self.student_names[s] = self.student_names[s].replace(" " , "")
         
     ''' Transform the data into cost matrix'''
     def calc_cost_matrix(self):
