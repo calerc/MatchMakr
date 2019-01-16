@@ -17,15 +17,19 @@ TODO:
     GIVE RECRUITING FACULTY AN ADVANTAGE
     ASSIGN COST TO HAVING NO LUNCH BREAK
     ADD NOT AVAILABLE SLOTS
+    IMPLEMENT FACULTY SIMILARY MATRIX
+    OUTPUT IN HUMAN-READABLE FORMAT
+    DON'T LET ANY STUDENT GET NO INTERVIEWS BECAUSE OF BEING LAST IN LIST
 '''
 
 
 ''' Imports'''
 from ortools.sat.python import cp_model
 import csv
-from os import path
+from os import path, makedirs
 import numpy as np
 import warnings
+from ortools.sat import sat_parameters_pb2
 
 
 class match_maker():
@@ -40,6 +44,10 @@ class match_maker():
         self.MAX_INTERVIEWS = 3
         self.NUM_INTERVIEWS = 10
         self.NUM_EXTRA_SLOTS = 2
+        
+        self.PATH = "/home/cale/Desktop/open_house/"
+        self.STUDENT_PREF = "Student_Preferences.csv"
+        self.FACULTY_PREF = "faculty_preferences.csv"
         
         # Calculated parameters
         self.all_interviews = range(self.NUM_INTERVIEWS)
@@ -59,9 +67,9 @@ class match_maker():
     def load_data(self):
         
         # Constants
-        PATH = "/home/cale/Desktop/open_house/"
-        STUDENT_PREF = "Student_Preferences.csv"
-        FACULTY_PREF = "faculty_preferences.csv"
+        PATH = self.PATH
+        STUDENT_PREF = self.STUDENT_PREF
+        FACULTY_PREF = self.FACULTY_PREF
         
         # Read the data from the CSV
         student_pref = []
@@ -123,27 +131,120 @@ class match_maker():
     ''' Randomly generate prefered matches for testing '''
     def define_random_matches(self):
         
-        NUM_STUDENTS = 48
+        # Parameters
+        NUM_STUDENTS = 70
         num_faculty = 31
         NUM_INTERVIEWS = 10
         
+        # Generate random matches
         prof_pref_4_students = np.random.randint(1, high=NUM_STUDENTS, size=(NUM_STUDENTS, num_faculty))
         stud_pref_4_profs = np.random.randint(1, high=num_faculty, size=(NUM_STUDENTS, num_faculty))
-        print(prof_pref_4_students)
-        print(stud_pref_4_profs)
-    
-        #prof_pref_4_students = np.array([[1, 1, 2], [1, 1, 2], [1, 1, 2]])*10
-        #stud_pref_4_profs = np.array([[2, 2, 1], [1, 2, 1], [2, 2, 1]])
-        
+
+        # Calculate the cost matrix
         cost_matrix = prof_pref_4_students * stud_pref_4_profs
-        print(cost_matrix)
-        #cost_matrix = prof_pref_4_students * stud_pref_4_profs
         cost_matrix = np.reshape(cost_matrix, (1, NUM_STUDENTS, num_faculty))
         cost_matrix = np.repeat(cost_matrix, NUM_INTERVIEWS, axis=0)
-        #cost_matrix = list(cost_matrix)
+        
+        self.faculty_pref = prof_pref_4_students
+        self.student_pref = stud_pref_4_profs
+
         
     
         return(prof_pref_4_students, stud_pref_4_profs, cost_matrix)
+        
+    ''' Print a numpy array as a csv file'''
+    def print_numpy_arrays(self, file_name, array):
+        with open(path.join(self.PATH, file_name), 'w') as csvfile:
+            writer = csv.writer(csvfile, delimiter=',')
+            for i in self.all_interviews:
+                for s in self.all_students:
+                    writer.writerow(array[i][s][:])
+                print('\n')
+                
+
+    ''' Convert the boolean matrix to a string matrix '''
+    def matches_as_text(self):
+        
+        # Interview - Faculty Schedule     
+        self.faculty_schedule = []        
+        for p in self.all_faculty:                
+            temp_list = []
+            for i in self.all_interviews:
+                s = 0
+                found_match = False
+                while s < self.num_students and not found_match:
+                    if self.results[i][s][p] == 1:
+                        temp_list.append(self.student_names[s])
+                        found_match = True
+                    s += 1
+                if not found_match:
+                    temp_list.append('Free')               
+            self.faculty_schedule.append(temp_list)
+            
+        if not path.exists(path.join(self.PATH, 'faculty_schedules')):
+            makedirs(path.join(self.PATH, 'faculty_schedules'))
+        
+        for p in self.all_faculty:
+            faculty_name = self.faculty_names[p] + '.txt'
+            filename = path.join(self.PATH,
+                                 'faculty_schedules',
+                                 faculty_name)
+            np.savetxt(filename, self.faculty_schedule[p],
+                       delimiter="\n", fmt='%s')
+            
+            
+        # Interview - Student Schedule     
+        self.student_schedule = []        
+        for s in self.all_students:                
+            temp_list = []
+            for i in self.all_interviews:
+                p = 0
+                found_match = False
+                while p < self.num_faculty and not found_match:
+                    if self.results[i][s][p] == 1:
+                        temp_list.append(self.faculty_names[p])
+                        found_match = True
+                    p += 1
+                if not found_match:
+                    temp_list.append('Free')               
+            self.student_schedule.append(temp_list)
+            
+        if not path.exists(path.join(self.PATH, 'student_schedules')):
+            makedirs(path.join(self.PATH, 'student_schedules'))
+        
+        for s in self.all_students:
+            student_name = self.student_names[s] + '.txt'
+            filename = path.join(self.PATH,
+                                 'student_schedules',
+                                 student_name)
+            np.savetxt(filename, self.student_schedule[s],
+                       delimiter="\n", fmt='%s')
+        
+        # Matches
+        self.matches_text = []        
+        for p in self.all_faculty:
+            student_names = np.asarray(self.student_names)
+            #matched_student_index = np.where(self.matches[p] == True)[0]
+            #temp_list = student_names[student_num] for student_num in matched_student_index
+            temp_list = student_names[self.matches[:, p]]
+            self.matches_text.append(temp_list.tolist())
+            
+        
+        faculty_names = np.asarray(self.faculty_names)
+        faculty_names = np.reshape(faculty_names, (-1, 1))
+        matches = np.asarray(self.matches_text)
+        matches = np.concatenate((faculty_names, matches), axis=1)
+
+            
+        filename = path.join(self.PATH,
+                             'matches_text.txt')
+        np.savetxt(filename, matches,
+                   delimiter="", fmt='%15s')
+            
+
+        
+                    
+            
     
     ''' Make the matches '''
     def main(self):
@@ -152,13 +253,9 @@ class match_maker():
         model = cp_model.CpModel()
     
         # Get cost matrix
-        #prof_pref_4_students, stud_pref_4_profs, cost_matrix = self.define_random_matches()
+        #self.define_random_matches()
         self.load_data()
-        
-        #prof_pref_4_students = self.faculty_pref
-        #stud_pref_4_profs = self.student_pref
         cost_matrix = self.cost_matrix
-        
         
         # Creates interview variables.
         # interview[(p, s, i)]: professor 'p' interviews student 's' for interview number 'i'
@@ -206,22 +303,19 @@ class match_maker():
                 for s in self.all_students for i in self.all_interviews))
         
         # Creates the solver and solve.
-        print('Building Model...')
+        print('Building Model...', flush=True)
         solver = cp_model.CpSolver()
-        print('Solving model...')
-        status = solver.Solve(model)
         
-        if status == cp_model.OPTIMAL:
-            print('optimal')
-        if status == cp_model.FEASIBLE:
-            print('feasible')
-        if status == cp_model.INFEASIBLE:
-            print('infeasible')
-        if status == cp_model.MODEL_INVALID:
-            print('model invalid')
-        if status == cp_model.UNKNOWN:
-            print('unknown')
+        print('Setting up workers...', flush=True)
+        solver.parameters = sat_parameters_pb2.SatParameters(num_search_workers=8)
         
+        print('Solving model...', flush=True)
+        status = solver.Solve(model)   
+        
+        print(solver.StatusName(status))
+ 
+        
+        # Collect results
         results = np.empty((self.NUM_INTERVIEWS, self.num_students, self.num_faculty))
         for i in self.all_interviews:
             for p in self.all_faculty:
@@ -229,16 +323,26 @@ class match_maker():
                     results[i][s][p] = solver.Value(interview[(p, s, i)])
                     
         print(results)
+             
+        # Save the results
+        self.results = results
+        self.solver = solver
+        self.matches = np.sum(self.results, axis=0).astype(bool)
         
-    
-        # Statistics.
-        #print()
-        #print('Statistics')
-        #print('  - Number of shift requests met = %i' % solver.ObjectiveValue(),
-        #      '(out of', num_nurses * min_shifts_per_nurse, ')')
-        print('  - wall time       : %f ms' % solver.WallTime())
+        # Convert the results to text
+        self.matches_as_text()
         
-        self.results = solver
+        # Write the results to a file
+        #np.savetxt(path.join(self.PATH, 'results.csv'), results, delimiter=",")
+        self.print_numpy_arrays('results.csv', self.results)
+        np.savetxt(path.join(self.PATH, 'matches.csv'),
+                   self.matches, delimiter=",",
+                   fmt='%i')
+        
+                
+                        
+        
+        
 
 
 if __name__ == '__main__':
