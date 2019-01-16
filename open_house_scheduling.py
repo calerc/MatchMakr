@@ -14,6 +14,9 @@ TODO:
     CONVERT CONSTANTS INTO CALCULATED VALUES FROM DATA
     MINIMIZE NUMBER OF EMPTY SLOTS
     ADD MINIMUM NUMBER OF EMPTY SLOTS (HARD LIMIT)
+    GIVE RECRUITING FACULTY AN ADVANTAGE
+    ASSIGN COST TO HAVING NO LUNCH BREAK
+    ADD NOT AVAILABLE SLOTS
 '''
 
 
@@ -22,25 +25,34 @@ from ortools.sat.python import cp_model
 import csv
 from os import path
 import numpy as np
-
-
-''' Constants '''
-NUM_STUDENTS = 43 #43
-NUM_PROFESSORS = 31 #31
-NUM_INTERVIEWS = 2
-all_students = range(NUM_STUDENTS)
-all_professors = range(NUM_PROFESSORS)
-all_interviews = range(NUM_INTERVIEWS)
-
-MIN_INTERVIEWS = 1
-MAX_INTERVIEWS = 3
-
+import warnings
 
 
 class match_maker():
     
+    
+    ''' Define parameters needed for scheduling '''
     def __init__(self):
-        self.faculty_advantage = 1
+        
+        # Constants
+        self.FACULTY_ADVANTAGE = 80
+        self.MIN_INTERVIEWS = 1
+        self.MAX_INTERVIEWS = 3
+        self.NUM_INTERVIEWS = 10
+        self.NUM_EXTRA_SLOTS = 2
+        
+        # Calculated parameters
+        self.all_interviews = range(self.NUM_INTERVIEWS)
+        
+        # Check parameter validity
+        if (self.FACULTY_ADVANTAGE < 0 or self.FACULTY_ADVANTAGE > 100):
+            raise ValueError('It is necessary that: 0 <= Faculty_Advantage <= 100')
+        
+        
+        if (type(self.FACULTY_ADVANTAGE) is not int):
+            int_faculty_advantage = int(self.FACULTY_ADVANTAGE)
+            self.FACULTY_ADVANTAGE = int_faculty_advantage
+            warnings.warn('Faculty Advantage must be an integer, rounding to the nearest integer')
 
 
     ''' Load the data '''
@@ -82,25 +94,41 @@ class match_maker():
         faculty_pref = np.asarray(faculty_data, dtype=np.float) + 1
         
         
-        # Return
+        # Collect loaded data
         self.student_pref = student_pref
         self.faculty_pref = faculty_pref
         self.faculty_names = faculty_names
         self.student_names = student_names
         
+        # Get necessary statistics about the data
+        self.num_students = len(self.student_names)
+        self.num_faculty = len(self.faculty_names)
+        
+        self.all_students = range(self.num_students)
+        self.all_faculty = range(self.num_faculty)
+       
         self.calc_cost_matrix()
         
-        
+    ''' Transform the data into cost matrix'''
     def calc_cost_matrix(self):
+                
+        alpha = self.FACULTY_ADVANTAGE
+        beta = 100 - alpha
         
-        self.cost_matrix = ((self.faculty_weight + self.faculty_pref)
-                              * self.student_pref)
-
+        self.cost_matrix = (alpha * self.faculty_pref + beta * self.student_pref).astype(int)
+        self.cost_matrix = np.reshape(self.cost_matrix,
+                                      (1, self.num_students, self.num_faculty))
+        self.cost_matrix = np.repeat(self.cost_matrix, self.NUM_INTERVIEWS, axis=0)
 
     ''' Randomly generate prefered matches for testing '''
     def define_random_matches(self):
-        prof_pref_4_students = np.random.randint(1, high=NUM_STUDENTS, size=(NUM_STUDENTS, NUM_PROFESSORS))
-        stud_pref_4_profs = np.random.randint(1, high=NUM_PROFESSORS, size=(NUM_STUDENTS, NUM_PROFESSORS))
+        
+        NUM_STUDENTS = 48
+        num_faculty = 31
+        NUM_INTERVIEWS = 10
+        
+        prof_pref_4_students = np.random.randint(1, high=NUM_STUDENTS, size=(NUM_STUDENTS, num_faculty))
+        stud_pref_4_profs = np.random.randint(1, high=num_faculty, size=(NUM_STUDENTS, num_faculty))
         print(prof_pref_4_students)
         print(stud_pref_4_profs)
     
@@ -110,7 +138,7 @@ class match_maker():
         cost_matrix = prof_pref_4_students * stud_pref_4_profs
         print(cost_matrix)
         #cost_matrix = prof_pref_4_students * stud_pref_4_profs
-        cost_matrix = np.reshape(cost_matrix, (1, NUM_STUDENTS, NUM_PROFESSORS))
+        cost_matrix = np.reshape(cost_matrix, (1, NUM_STUDENTS, num_faculty))
         cost_matrix = np.repeat(cost_matrix, NUM_INTERVIEWS, axis=0)
         #cost_matrix = list(cost_matrix)
         
@@ -135,38 +163,38 @@ class match_maker():
         # Creates interview variables.
         # interview[(p, s, i)]: professor 'p' interviews student 's' for interview number 'i'
         interview = {}
-        for p in all_professors:
-            for s in all_students:
-                for i in all_interviews:
+        for p in self.all_faculty:
+            for s in self.all_students:
+                for i in self.all_interviews:
                     interview[(p, s,
                             i)] = model.NewBoolVar('interview_n%id%is%i' % (p, s, i))
     
         # Each student has no more than one interview at a time
-        for p in all_professors:
-            for i in all_interviews:
-                model.Add(sum(interview[(p, s, i)] for s in all_students) <= 1)
+        for p in self.all_faculty:
+            for i in self.all_interviews:
+                model.Add(sum(interview[(p, s, i)] for s in self.all_students) <= 1)
     
         # Each professor has no more than one student per interview
-        for s in all_students:
-            for i in all_interviews:
-                model.Add(sum(interview[(p, s, i)] for p in all_professors) <= 1)
+        for s in self.all_students:
+            for i in self.all_interviews:
+                model.Add(sum(interview[(p, s, i)] for p in self.all_faculty) <= 1)
     
         # No student is assigned to the same professor twice
-        for s in all_students:
-            for p in all_professors:
-                model.Add(sum(interview[(p, s, i)] for i in all_interviews) <= 1)
+        for s in self.all_students:
+            for p in self.all_faculty:
+                model.Add(sum(interview[(p, s, i)] for i in self.all_interviews) <= 1)
     
     
     
         # Ensure that no student gets too many or too few interviews
         #for s in all_students:
         #    num_interviews_stud = sum(
-        #        interview[(p, s, i)] for p in all_professors for i in all_interviews)
+        #        interview[(p, s, i)] for p in all_faculty for i in all_interviews)
         #    model.Add(MIN_INTERVIEWS <= num_interviews_stud)
         #    model.Add(num_interviews_stud <= MAX_INTERVIEWS)
     
         # Ensure that no professor gets too many or too few interviews
-        #for p in all_professors:
+        #for p in all_faculty:
         #    num_interviews_prof = sum(
         #        interview[(p, s, i)] for s in all_students for i in all_interviews)
         #    model.Add(MIN_INTERVIEWS <= num_interviews_prof)
@@ -174,10 +202,11 @@ class match_maker():
         
         # Define the minimization of cost
         model.Maximize(
-            sum(cost_matrix[i][s][p] * interview[(p, s, i)] for p in all_professors 
-                for s in all_students for i in all_interviews))
+            sum(cost_matrix[i][s][p] * interview[(p, s, i)] for p in self.all_faculty 
+                for s in self.all_students for i in self.all_interviews))
         
         # Creates the solver and solve.
+        print('Building Model...')
         solver = cp_model.CpSolver()
         print('Solving model...')
         status = solver.Solve(model)
@@ -193,10 +222,10 @@ class match_maker():
         if status == cp_model.UNKNOWN:
             print('unknown')
         
-        results = np.empty((NUM_INTERVIEWS, NUM_STUDENTS, NUM_PROFESSORS))
-        for i in all_interviews:
-            for p in all_professors:
-                for s in all_students:
+        results = np.empty((self.NUM_INTERVIEWS, self.num_students, self.num_faculty))
+        for i in self.all_interviews:
+            for p in self.all_faculty:
+                for s in self.all_students:
                     results[i][s][p] = solver.Value(interview[(p, s, i)])
                     
         print(results)
@@ -216,4 +245,3 @@ if __name__ == '__main__':
     mm = match_maker()
     mm.load_data()
     mm.main()
-    #main()
