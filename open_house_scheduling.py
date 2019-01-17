@@ -11,7 +11,6 @@ from __future__ import print_function
 
 '''
 TODO:
-    CONVERT CONSTANTS INTO CALCULATED VALUES FROM DATA
     MINIMIZE NUMBER OF EMPTY SLOTS
     ADD MINIMUM NUMBER OF EMPTY SLOTS (HARD LIMIT)
     GIVE RECRUITING FACULTY AN ADVANTAGE
@@ -21,6 +20,7 @@ TODO:
     OUTPUT IN HUMAN-READABLE FORMAT
     DON'T LET ANY STUDENT GET NO INTERVIEWS BECAUSE OF BEING LAST IN LIST
     CREATE FUNCTION TO READ DATA FROM HUMAN-FRIENDLY FORMAT
+    ADD MATCHMAKING BASED ON TRACK (NEURAL, BIOMECHANICS, IMAGING, BIOMATERIALS)
 '''
 
 
@@ -50,6 +50,12 @@ class match_maker():
         self.STUDENT_PREF = "student_preferences.csv"
         self.FACULTY_PREF = "faculty_preferences.csv"
         
+        self.student_names = []
+        self.faculty_names = []
+        
+        self.USE_RANKING = True
+        self.MAX_RANKING = 10
+        
         # Calculated parameters
         self.all_interviews = range(self.NUM_INTERVIEWS)
         
@@ -63,70 +69,102 @@ class match_maker():
             self.FACULTY_ADVANTAGE = int_faculty_advantage
             warnings.warn('Faculty Advantage must be an integer, rounding to the nearest integer')
 
-
-    ''' Load the data '''
-    def load_data(self):
-        
-        # Constants
-        PATH = self.PATH
-        STUDENT_PREF = self.STUDENT_PREF
-        FACULTY_PREF = self.FACULTY_PREF
-        
-        # Read the data from the CSV
-        student_pref = []
-        faculty_pref = []
-        
-        with open(path.join(PATH, STUDENT_PREF), 'r') as csvfile:
-            reader = csv.reader(csvfile, delimiter=',')
-            for row in reader:
-                student_pref.append(row)
-                
-        with open(path.join(PATH, FACULTY_PREF), 'r') as csvfile:
-            reader = csv.reader(csvfile, delimiter=',')
-            for row in reader:
-                faculty_pref.append(row)
-    
-        # Seperate the data and the names
-        faculty_names = faculty_pref[0][1:]
-        
-        student_names = []
-        student_data = []
-        faculty_data = []
-        for student in faculty_pref[1:]:
-            student_names.append(student[0])
-            faculty_data.append(student[1:])  
-    
-        for student in student_pref[1:]:
-            student_data.append(student[1:])
-    
-        student_pref = np.asarray(student_data, dtype=np.float) + 1
-        faculty_pref = np.asarray(faculty_data, dtype=np.float) + 1
-        
-        
-        # Collect loaded data
-        self.student_pref = student_pref
-        self.faculty_pref = faculty_pref
-        self.faculty_names = faculty_names
-        self.student_names = student_names
-        
-        
-        # Get necessary statistics about the data
-        self.num_students = len(self.student_names)
-        self.num_faculty = len(self.faculty_names)
-        
-        self.all_students = range(self.num_students)
-        self.all_faculty = range(self.num_faculty)
-       
-        self.calc_cost_matrix()
-        
-        # Remove whitespace from names
-        for p in self.all_faculty:
-            self.faculty_names[p] = self.faculty_names[p].replace("'", "")
-            self.faculty_names[p] = self.faculty_names[p].replace(" ", "")
+   
+    ''' Old load function.  Here for documentation '''
+    def load_data_defunct(self):
+        pass
+    '''
+            # Constants
             
-        for s in self.all_students:            
-            self.student_names[s] = self.student_names[s].replace("'", "")
-            self.student_names[s] = self.student_names[s].replace(" " , "")
+            PATH = self.PATH
+            STUDENT_PREF = self.STUDENT_PREF
+            FACULTY_PREF = self.FACULTY_PREF
+
+            # Read the data from the CSV
+            student_pref = []
+            faculty_pref = []
+            
+            with open(path.join(PATH, STUDENT_PREF), 'r') as csvfile:
+                reader = csv.reader(csvfile, delimiter=',')
+                for row in reader:
+                    student_pref.append(row)
+                    
+            with open(path.join(PATH, FACULTY_PREF), 'r') as csvfile:
+                reader = csv.reader(csvfile, delimiter=',')
+                for row in reader:
+                    faculty_pref.append(row)
+            
+            # Seperate the data and the names
+            faculty_names = faculty_pref[0][1:]
+            
+            student_names = []
+            student_data = []
+            faculty_data = []
+            for student in faculty_pref[1:]:
+                student_names.append(student[0])
+                faculty_data.append(student[1:])  
+            
+            for student in student_pref[1:]:
+                student_data.append(student[1:])
+            
+            student_pref = np.asarray(student_data, dtype=np.float) + 1
+            faculty_pref = np.asarray(faculty_data, dtype=np.float) + 1
+            
+            
+            # Collect loaded data
+            self.student_pref = student_pref
+            self.faculty_pref = faculty_pref
+            self.faculty_names = faculty_names
+            self.student_names = student_names
+            
+            
+            # Get necessary statistics about the data
+            self.num_students = len(self.student_names)
+            self.num_faculty = len(self.faculty_names)
+            
+            self.all_students = range(self.num_students)
+            self.all_faculty = range(self.num_faculty)
+
+            # Remove whitespace from names
+            for p in self.all_faculty:
+                self.faculty_names[p] = self.faculty_names[p].replace("'", "")
+                self.faculty_names[p] = self.faculty_names[p].replace(" ", "")
+                
+            for s in self.all_students:            
+                self.student_names[s] = self.student_names[s].replace("'", "")
+                self.student_names[s] = self.student_names[s].replace(" " , "")
+    '''
+        
+        
+    '''
+        Add names if we discover them when loading new data
+        Because names are appended, we just add zeros at the end
+    '''
+    def add_names_to_match_data(self, data, new_data):
+        
+        difference_in_size = np.shape(new_data)[0] - np.shape(data)[0] 
+        if difference_in_size > 0:
+            zero_pad = np.zeros((difference_in_size, np.shape(data)[1]))
+            data = np.concatenate((data, zero_pad), axis=0)
+            
+        return data
+        
+    ''' Load the data '''
+    def load_data(self):      
+        
+        # Load the data
+        self.student_pref = self.load_data_from_human_readable(self.STUDENT_PREF)
+        self.faculty_pref = self.load_data_from_human_readable(self.FACULTY_PREF)
+        self.student_pref = self.add_names_to_match_data(self.student_pref, self.faculty_pref)
+        
+        self.carol_matches = self.load_data_from_human_readable('assignments.csv') # Remove this after testing
+        self.student_pref = self.add_names_to_match_data(self.student_pref, self.carol_matches)
+        self.faculty_pref = self.add_names_to_match_data(self.faculty_pref, self.carol_matches)
+        
+        # Calculate the cost matrix
+        self.calc_cost_matrix()
+
+        
         
     ''' Transform the data into cost matrix'''
     def calc_cost_matrix(self):
@@ -242,14 +280,19 @@ class match_maker():
             
         
         faculty_names = np.asarray(self.faculty_names)
-        faculty_names = np.reshape(faculty_names, (-1, 1))
+        #faculty_names = np.reshape(faculty_names, (1))
         matches = np.asarray(self.matches_text)
-        matches = np.concatenate((faculty_names, matches), axis=1)
+        matches_2_print = []
+        for p in self.all_faculty:
+            text = [faculty_names[p]]
+            text.append(matches[p])
+            matches_2_print.append(text)
+       # matches = np.concatenate((faculty_names, matches))
 
             
         filename = path.join(self.PATH,
                              'matches_text.txt')
-        np.savetxt(filename, matches,
+        np.savetxt(filename, matches_2_print,
                    delimiter="", fmt='%15s')
             
 
@@ -310,34 +353,88 @@ class match_maker():
             reader = csv.reader(csvfile, delimiter=',')
             for row in reader:
                 match_data.append(row)
+        
+        # Get the faculty names
+        if not self.faculty_names:
+            self.faculty_names = match_data[1][1:]
+            self.num_faculty = len(self.faculty_names)
+            self.all_faculty = range(self.num_faculty)
+
+        # Get the student names
+        student_names = match_data[3:]
+        
+        # Make the student names an array
+        all_students = np.asarray(student_names)
+        all_students = all_students[:, 1:]      # This removes the first column, which is emtpy
+        
+        # Remove spaces from names
+        for count, name in enumerate(all_students):
+            for count2, name2 in enumerate(name):
+                all_students[count][count2] = name2.replace(' ', '')
+        
+        # Get the unique student names
+        self.get_unique_student_names(all_students)
+        
+        # Put the match data in an array
+        match_data_output = np.zeros((self.num_students, self.num_faculty))
+        max_requests_made = np.shape(all_students)[0]
+        name_array = np.asarray(self.student_names)
+        for request_num in range(max_requests_made):
+            for p in self.all_faculty:
+                student_num = np.where(all_students[request_num, p] == name_array)
+                if np.shape(student_num) == (1, 1):
+                    if self.USE_RANKING:
+                        match_data_output[student_num, p] = self.MAX_RANKING - request_num
+                        if match_data_output[student_num, p] < 0:
+                            match_data_output[student_num, p] = 0
+                    else:
+                        match_data_output[student_num, p] = 1
                 
-        faculty_names = match_data[1]
-        #num_faculty = len(faculty_names)
-        student_matches = match_data[3:]
-        
-        # Find unique student names
-        all_students = np.asarray(student_matches)
-        all_students_unique = np.reshape(all_students, (-1, 1))
-        
-        for count, name in enumerate(all_students_unique):
-             all_students_unique[count] = name[0].replace(' ', '')
-        student_names, student_idx = np.unique(all_students_unique, return_inverse=True)
-        #name_lengths = np.asarray([len(name) for name in student_names])
-        
-        is_empty_name = np.asarray([name == '' for name in student_names])
-        student_names = student_names[np.logical_not(is_empty_name)]
-        
-        print('The following '
-              + str(len(student_names))
-              + ' student names have been detected:')
-        
-        print(student_names)
-        
+
+
+        '''
         self.carol_faculty = faculty_names
         self.carol_students = student_names.tolist()
         self.carol_matches = all_students
         
         self.load_carol_matches()
+        '''
+        return match_data_output
+        
+        
+        
+    ''' Check what names should be appended to student array '''
+    def get_unique_student_names(self, new_names):
+        
+        # Find unique student names        
+        all_students_unique = np.reshape(new_names, (-1, 1))
+        
+        for count, name in enumerate(all_students_unique):
+             all_students_unique[count] = name[0]
+        new_student_names, student_idx = np.unique(all_students_unique, return_inverse=True)
+        
+        # Remove 'empty' names
+        is_empty_name = np.asarray([name == '' for name in new_student_names])
+        new_student_names = new_student_names[np.logical_not(is_empty_name)]
+        
+        # Find the names that are new
+        previous_names = np.asarray(self.student_names)
+        new_names = np.asarray(new_student_names)
+        is_previous_name = np.in1d(new_names, previous_names)
+        really_new_names = new_names[np.logical_not(is_previous_name)].tolist()
+        
+        # Append the new names to the student_names array
+        for name in really_new_names:
+            self.student_names.append(name)
+        self.num_students = len(self.student_names)
+        self.all_students = range(self.num_students)
+        
+        # Tell the user what names have been found
+        print('The following '
+              + str(len(self.student_names))
+              + ' student names have been detected:')
+        
+        print(self.student_names)
             
     
     ''' Make the matches '''
@@ -443,12 +540,12 @@ if __name__ == '__main__':
     
     mm = match_maker()
     mm.load_data()
-    mm.load_data_from_human_readable('carol_matches.csv')
+    mm.main()
     
     
     '''
     
     
-    mm.main()
+    
     mm.calculate_cost()
     '''
