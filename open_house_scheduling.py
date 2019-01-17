@@ -7,20 +7,30 @@ from __future__ import print_function
     January 14, 2019
 
     Attempts to schedule student-faculty interviews
-'''
-
-'''
-TODO:
-    MINIMIZE NUMBER OF EMPTY SLOTS
-    ADD MINIMUM NUMBER OF EMPTY SLOTS (HARD LIMIT)
-    GIVE RECRUITING FACULTY AN ADVANTAGE
-    ASSIGN COST TO HAVING NO LUNCH BREAK
-    ADD NOT AVAILABLE SLOTS
-    IMPLEMENT FACULTY SIMILARY MATRIX
-    OUTPUT IN HUMAN-READABLE FORMAT
-    DON'T LET ANY STUDENT GET NO INTERVIEWS BECAUSE OF BEING LAST IN LIST
-    CREATE FUNCTION TO READ DATA FROM HUMAN-FRIENDLY FORMAT
-    ADD MATCHMAKING BASED ON TRACK (NEURAL, BIOMECHANICS, IMAGING, BIOMATERIALS)
+    
+    Current features:
+        Reads faculty and student preferences from human-readable .csv
+        Can interpret lists as ordered choices
+        Can weight faculty preferences higher/lower than student choices
+        Generates human-readable .csv schedules
+        Generates human-readable un-ordered match list
+        
+        
+    Future features:
+        MINIMIZE NUMBER OF EMPTY SLOTS
+        ADD MINIMUM NUMBER OF INTERVIEWS (HARD LIMIT) - Appears to work, just test
+        ADD MAXIMUM NUMBER OF INTERVIEWS PER PERSON - Appears to work, just test
+        GIVE RECRUITING FACULTY AN ADVANTAGE
+        ASSIGN COST TO HAVING NO LUNCH BREAK
+        ADD NOT AVAILABLE SLOTS
+        IMPLEMENT FACULTY SIMILARY MATRIX
+        ENSURE THAT ALL STUDENTS GET FAIR MATCHES, REGARDLESS OF PLACE ON LIST
+        INCREASE 'BENEFIT' OF FIRST THREE CHOICES
+        ADD MATCHMAKING BASED ON TRACK (NEURAL, BIOMECHANICS, IMAGING, BIOMATERIALS)  
+        ACCEPT TIME VECTOR FOR PRINTING TO SCHEDULE
+        PRINT PREFERENCE ON OUPUT FOR DEBUGGING ONLY
+        VALIDATE THAT EVERYTHING WORKS USING LAST YEAR'S MATCHES
+        CREATE GUI
 '''
 
 
@@ -41,9 +51,9 @@ class match_maker():
         
         # Constants
         self.FACULTY_ADVANTAGE = 50
-        self.MIN_INTERVIEWS = 1
-        self.MAX_INTERVIEWS = 3
         self.NUM_INTERVIEWS = 10
+        self.MIN_INTERVIEWS = 0
+        self.MAX_INTERVIEWS = 10
         self.NUM_EXTRA_SLOTS = 2
         
         self.PATH = "/home/cale/Desktop/open_house/fresh_start"
@@ -55,6 +65,7 @@ class match_maker():
         
         self.USE_RANKING = True
         self.MAX_RANKING = 10
+        self.CHOICE_EXPONENT = 2
         
         # Calculated parameters
         self.all_interviews = range(self.NUM_INTERVIEWS)
@@ -72,68 +83,67 @@ class match_maker():
    
     ''' Old load function.  Here for documentation '''
     def load_data_defunct(self):
-        pass
-    '''
-            # Constants
-            
-            PATH = self.PATH
-            STUDENT_PREF = self.STUDENT_PREF
-            FACULTY_PREF = self.FACULTY_PREF
+    
+        # Constants
+        
+        PATH = self.PATH
+        STUDENT_PREF = self.STUDENT_PREF
+        FACULTY_PREF = self.FACULTY_PREF
 
-            # Read the data from the CSV
-            student_pref = []
-            faculty_pref = []
-            
-            with open(path.join(PATH, STUDENT_PREF), 'r') as csvfile:
-                reader = csv.reader(csvfile, delimiter=',')
-                for row in reader:
-                    student_pref.append(row)
-                    
-            with open(path.join(PATH, FACULTY_PREF), 'r') as csvfile:
-                reader = csv.reader(csvfile, delimiter=',')
-                for row in reader:
-                    faculty_pref.append(row)
-            
-            # Seperate the data and the names
-            faculty_names = faculty_pref[0][1:]
-            
-            student_names = []
-            student_data = []
-            faculty_data = []
-            for student in faculty_pref[1:]:
-                student_names.append(student[0])
-                faculty_data.append(student[1:])  
-            
-            for student in student_pref[1:]:
-                student_data.append(student[1:])
-            
-            student_pref = np.asarray(student_data, dtype=np.float) + 1
-            faculty_pref = np.asarray(faculty_data, dtype=np.float) + 1
-            
-            
-            # Collect loaded data
-            self.student_pref = student_pref
-            self.faculty_pref = faculty_pref
-            self.faculty_names = faculty_names
-            self.student_names = student_names
-            
-            
-            # Get necessary statistics about the data
-            self.num_students = len(self.student_names)
-            self.num_faculty = len(self.faculty_names)
-            
-            self.all_students = range(self.num_students)
-            self.all_faculty = range(self.num_faculty)
-
-            # Remove whitespace from names
-            for p in self.all_faculty:
-                self.faculty_names[p] = self.faculty_names[p].replace("'", "")
-                self.faculty_names[p] = self.faculty_names[p].replace(" ", "")
+        # Read the data from the CSV
+        student_pref = []
+        faculty_pref = []
+        
+        with open(path.join(PATH, STUDENT_PREF), 'r') as csvfile:
+            reader = csv.reader(csvfile, delimiter=',')
+            for row in reader:
+                student_pref.append(row)
                 
-            for s in self.all_students:            
-                self.student_names[s] = self.student_names[s].replace("'", "")
-                self.student_names[s] = self.student_names[s].replace(" " , "")
-    '''
+        with open(path.join(PATH, FACULTY_PREF), 'r') as csvfile:
+            reader = csv.reader(csvfile, delimiter=',')
+            for row in reader:
+                faculty_pref.append(row)
+        
+        # Seperate the data and the names
+        faculty_names = faculty_pref[0][1:]
+        
+        student_names = []
+        student_data = []
+        faculty_data = []
+        for student in faculty_pref[1:]:
+            student_names.append(student[0])
+            faculty_data.append(student[1:])  
+        
+        for student in student_pref[1:]:
+            student_data.append(student[1:])
+        
+        student_pref = np.asarray(student_data, dtype=np.float) + 1
+        faculty_pref = np.asarray(faculty_data, dtype=np.float) + 1
+        
+        
+        # Collect loaded data
+        self.student_pref = student_pref
+        self.faculty_pref = faculty_pref
+        self.faculty_names = faculty_names
+        self.student_names = student_names
+        
+        
+        # Get necessary statistics about the data
+        self.num_students = len(self.student_names)
+        self.num_faculty = len(self.faculty_names)
+        
+        self.all_students = range(self.num_students)
+        self.all_faculty = range(self.num_faculty)
+
+        # Remove whitespace from names
+        for p in self.all_faculty:
+            self.faculty_names[p] = self.faculty_names[p].replace("'", "")
+            self.faculty_names[p] = self.faculty_names[p].replace(" ", "")
+            
+        for s in self.all_students:            
+            self.student_names[s] = self.student_names[s].replace("'", "")
+            self.student_names[s] = self.student_names[s].replace(" " , "")
+    
         
         
     '''
@@ -176,6 +186,9 @@ class match_maker():
         self.cost_matrix = np.reshape(self.cost_matrix,
                                       (1, self.num_students, self.num_faculty))
         self.cost_matrix = np.repeat(self.cost_matrix, self.NUM_INTERVIEWS, axis=0)
+        
+        # Square the cost matrix to maximize chance of getting first choice
+        self.cost_matrix = np.power(self.cost_matrix, self.CHOICE_EXPONENT)
 
     ''' Randomly generate prefered matches for testing '''
     def define_random_matches(self):
@@ -475,18 +488,18 @@ class match_maker():
     
     
         # Ensure that no student gets too many or too few interviews
-        #for s in all_students:
-        #    num_interviews_stud = sum(
-        #        interview[(p, s, i)] for p in all_faculty for i in all_interviews)
-        #    model.Add(MIN_INTERVIEWS <= num_interviews_stud)
-        #    model.Add(num_interviews_stud <= MAX_INTERVIEWS)
+        for s in self.all_students:
+            num_interviews_stud = sum(
+                interview[(p, s, i)] for p in self.all_faculty for i in self.all_interviews)
+            model.Add(self.MIN_INTERVIEWS <= num_interviews_stud)
+            model.Add(num_interviews_stud <= self.MAX_INTERVIEWS)
     
         # Ensure that no professor gets too many or too few interviews
-        #for p in all_faculty:
-        #    num_interviews_prof = sum(
-        #        interview[(p, s, i)] for s in all_students for i in all_interviews)
-        #    model.Add(MIN_INTERVIEWS <= num_interviews_prof)
-        #    model.Add(num_interviews_prof <= MAX_INTERVIEWS)
+        for p in self.all_faculty:
+            num_interviews_prof = sum(
+                interview[(p, s, i)] for s in self.all_students for i in self.all_interviews)
+            model.Add(self.MIN_INTERVIEWS <= num_interviews_prof)
+            model.Add(num_interviews_prof <= self.MAX_INTERVIEWS)
         
         # Define the minimization of cost
         model.Maximize(
