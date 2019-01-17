@@ -20,6 +20,7 @@ TODO:
     IMPLEMENT FACULTY SIMILARY MATRIX
     OUTPUT IN HUMAN-READABLE FORMAT
     DON'T LET ANY STUDENT GET NO INTERVIEWS BECAUSE OF BEING LAST IN LIST
+    CREATE FUNCTION TO READ DATA FROM HUMAN-FRIENDLY FORMAT
 '''
 
 
@@ -45,8 +46,8 @@ class match_maker():
         self.NUM_INTERVIEWS = 10
         self.NUM_EXTRA_SLOTS = 2
         
-        self.PATH = "/home/cale/Desktop/open_house/"
-        self.STUDENT_PREF = "Student_Preferences.csv"
+        self.PATH = "/home/cale/Desktop/open_house/fresh_start"
+        self.STUDENT_PREF = "student_preferences.csv"
         self.FACULTY_PREF = "faculty_preferences.csv"
         
         # Calculated parameters
@@ -252,8 +253,91 @@ class match_maker():
                    delimiter="", fmt='%15s')
             
 
+    ''' Calculate how much the method costs, and how good it is
+        for each person to look for "bad deals
+    '''
+    def calculate_cost(self):
+        pass
+    
+    
+    ''' 
+        Load Carol's previous matches as a comparison 
+        This can be deleted once the validity of this method has been verified
+    '''
+    def load_carol_matches(self):
         
-                    
+        # Compare names of students (assume faculty are same)
+        matching_name_num = -1 * np.ones(self.num_students)
+        num_students_carol = len(self.carol_students)
+        for count, name in enumerate(self.student_names):
+            match_not_found = True
+            student_num = 0
+            while student_num < num_students_carol and match_not_found:
+                if name == self.carol_students[student_num]:
+                    matching_name_num[count] = student_num
+                    print('match found ' + str(count) + ' ' + name)
+                    match_not_found = False
+                student_num += 1
+                
+        # Print the names that weren't found in Carol's matches
+        names_array = np.asarray(self.student_names)
+        names_not_found = names_array[matching_name_num == -1]
+        print('Names not found:')
+        print(names_not_found)
+                
+        # Populate the array with Carols names and matches
+        a = 1
+            
+        
+    
+    ''' 
+        Read requests from human-readable format 
+        Rows:
+            The first row of the file will be a header
+            The second row of the file will be the faculty names
+            The third row will be blank
+            The next rows will contain the names of students
+        Columns:
+            The first column will be a header
+            The next columns will contain data
+        
+    '''
+    def load_data_from_human_readable(self, filename):
+        
+        # Load the data
+        match_data = []
+        with open(path.join(self.PATH, filename), 'r') as csvfile:
+            reader = csv.reader(csvfile, delimiter=',')
+            for row in reader:
+                match_data.append(row)
+                
+        faculty_names = match_data[1]
+        #num_faculty = len(faculty_names)
+        student_matches = match_data[3:]
+        
+        # Find unique student names
+        all_students = np.asarray(student_matches)
+        all_students_unique = np.reshape(all_students, (-1, 1))
+        
+        for count, name in enumerate(all_students_unique):
+             all_students_unique[count] = name[0].replace(' ', '')
+        student_names, student_idx = np.unique(all_students_unique, return_inverse=True)
+        #name_lengths = np.asarray([len(name) for name in student_names])
+        
+        is_empty_name = np.asarray([name == '' for name in student_names])
+        student_names = student_names[np.logical_not(is_empty_name)]
+        
+        print('The following '
+              + str(len(student_names))
+              + ' student names have been detected:')
+        
+        print(student_names)
+        
+        self.carol_faculty = faculty_names
+        self.carol_students = student_names.tolist()
+        self.carol_matches = all_students
+        
+        self.load_carol_matches()
             
     
     ''' Make the matches '''
@@ -356,6 +440,15 @@ class match_maker():
 
 
 if __name__ == '__main__':
+    
     mm = match_maker()
     mm.load_data()
+    mm.load_data_from_human_readable('carol_matches.csv')
+    
+    
+    '''
+    
+    
     mm.main()
+    mm.calculate_cost()
+    '''
