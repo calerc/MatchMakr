@@ -23,6 +23,7 @@ from __future__ import print_function
     Future features:
         ADD MINIMUM NUMBER OF INTERVIEWS (HARD LIMIT) - Appears to work, just test
         ADD MAXIMUM NUMBER OF INTERVIEWS PER PERSON - Appears to work, just test
+        CHANGE HOW WE INPUT STUDENT PREFERENCES SO THAT THEY ARE ORDERED
         ADD NOT AVAILABLE SLOTS
         IMPLEMENT FACULTY SIMILARY MATRIX
         ADD MATCHMAKING BASED ON TRACK (NEURAL, BIOMECHANICS, IMAGING, BIOMATERIALS)  
@@ -44,7 +45,7 @@ from ortools.sat import sat_parameters_pb2
 
 
 class match_maker():
-    
+       
     
     ''' Define parameters needed for scheduling '''
     def __init__(self):
@@ -52,9 +53,9 @@ class match_maker():
         # Constants
         self.FACULTY_ADVANTAGE = 50
         self.NUM_INTERVIEWS = 10
-        self.MIN_INTERVIEWS = 0
+        self.MIN_INTERVIEWS = 3
         self.MAX_INTERVIEWS = 10
-        self.NUM_EXTRA_SLOTS = 2
+        #self.NUM_EXTRA_SLOTS = 2
         
         self.PATH = "/home/cale/Desktop/open_house/fresh_start"
         self.STUDENT_PREF = "student_preferences.csv"
@@ -74,7 +75,9 @@ class match_maker():
         self.USE_RECRUITING = True
         self.RECRUITING_WEIGHT = 10
         
-        self.EMPTY_PENALTY = 500  # 500 # This is a positive number, it will be made negative when used
+        self.EMPTY_PENALTY = 500  # 500 # This is a positive number, it will be made negative when used # Make zero to not use
+        
+        self.DEBUG_PRINT_PREFERENCE = True
         
         # Calculated parameters
         self.all_interviews = range(self.NUM_INTERVIEWS)
@@ -88,6 +91,41 @@ class match_maker():
             int_faculty_advantage = int(self.FACULTY_ADVANTAGE)
             self.FACULTY_ADVANTAGE = int_faculty_advantage
             warnings.warn('Faculty Advantage must be an integer, rounding to the nearest integer')
+
+    ''' Track how many people got their preferences '''
+    def check_preferences(self):
+        
+        NUM_PREFERENCES_2_CHECK = 3
+        
+        # Students
+        student_pref = self.student_pref * self.matches
+        self.student_pref_cost = np.sum(student_pref, axis=1)
+        total_preferences = np.empty((NUM_PREFERENCES_2_CHECK))
+        preferences_met = np.empty((NUM_PREFERENCES_2_CHECK))
+        for pref_num in range(NUM_PREFERENCES_2_CHECK):
+            total_preferences[pref_num] = np.sum(self.student_pref == (10 - pref_num))
+            preferences_met[pref_num] = np.sum(student_pref == (10 - pref_num))
+        
+        self.student_fraction_preferences_met = preferences_met / total_preferences
+        print('Fraction of student preferences met: ')
+        print(self.student_fraction_preferences_met)
+        
+        # Faculty
+        faculty_pref = self.faculty_pref * self.matches
+        self.faculty_pref_cost = np.sum(faculty_pref, axis=0)
+        total_preferences = np.empty((NUM_PREFERENCES_2_CHECK))
+        preferences_met = np.empty((NUM_PREFERENCES_2_CHECK))
+        for pref_num in range(NUM_PREFERENCES_2_CHECK):
+            total_preferences[pref_num] = np.sum(self.faculty_pref == (10 - pref_num))
+            preferences_met[pref_num] = np.sum(faculty_pref == (10 - pref_num))
+        
+        self.faculty_fraction_preferences_met = preferences_met / total_preferences
+        print('Fraction of faculty preferences met: ')
+        print(self.faculty_fraction_preferences_met)
+        
+        
+        
+        # Faculty
 
     ''' Loads the interview times from a csv '''
     def load_interview_times(self):
@@ -331,6 +369,12 @@ class match_maker():
             
             schedule = np.concatenate((header, schedule), axis=0)
             
+            if self.DEBUG_PRINT_PREFERENCE:
+                preferences = np.empty((1, header_size + self.NUM_INTERVIEWS), dtype=int)
+                int_num, stud_num = np.where(self.results[:, :, p])
+                preferences[0, header_size + int_num] = self.faculty_pref[stud_num, s]
+                schedule = np.concatenate((schedule, np.transpose(preferences)), axis=1)
+                
             np.savetxt(filename, schedule,
                        delimiter=":   ", fmt='%s')
             
@@ -360,7 +404,10 @@ class match_maker():
                                  'student_schedules',
                                  student_name)
             
-                        
+            student_schedule = np.asarray(self.student_schedule[p])
+            student_schedule = np.reshape(student_schedule, (-1, 1))            
+            schedule = np.concatenate((times, student_schedule), axis=1)
+            
             header = np.empty((header_size, 2), dtype=object)
             header[0, 0] = "Student"
             header[0, 1] = self.student_names[s]
@@ -369,12 +416,13 @@ class match_maker():
             header[2, 0] = '   Time    '
             header[2, 1] = 'Faculty:'
             
-            schedule = np.concatenate((header, schedule), axis=0)
+            schedule = np.concatenate((header, schedule), axis=0)            
             
-            
-            student_schedule = np.asarray(self.student_schedule[s])
-            student_schedule = np.reshape(student_schedule, (-1, 1))
-            schedule = np.concatenate((times, student_schedule), axis=1)
+            if self.DEBUG_PRINT_PREFERENCE:
+                preferences = np.empty((1, header_size + self.NUM_INTERVIEWS), dtype=int)
+                int_num, fac_num = np.where(self.results[:, s, :])
+                preferences[0, header_size + int_num] = self.student_pref[s, fac_num]
+                schedule = np.concatenate((schedule, np.transpose(preferences)), axis=1)
             
             np.savetxt(filename, schedule,
                        delimiter=":   ", fmt='%s')
@@ -404,14 +452,6 @@ class match_maker():
                              'matches.txt')
         np.savetxt(filename, matches_2_print,
                    delimiter="", fmt='%15s')
-            
-
-    ''' Calculate how much the method costs, and how good it is
-        for each person to look for "bad deals
-    '''
-    def calculate_cost(self):
-        pass
-    
     
     ''' 
         Load Carol's previous matches as a comparison 
@@ -644,6 +684,9 @@ class match_maker():
         np.savetxt(path.join(self.PATH, 'matches.csv'),
                    self.matches, delimiter=",",
                    fmt='%i')
+        
+        # Check the percentage of preferences met
+        self.check_preferences()
         
                 
                         
