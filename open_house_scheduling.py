@@ -16,16 +16,16 @@ from __future__ import print_function
         Generates human-readable un-ordered match list
         Allows faculty to request no interviews during lunch
         Give recruiting faculty an advantage in who they choose
+        Outputs a schedule with a time vector read from a csv
+        Excepts penalty for empty interview slots
         
         
     Future features:
-        MINIMIZE NUMBER OF EMPTY SLOTS
         ADD MINIMUM NUMBER OF INTERVIEWS (HARD LIMIT) - Appears to work, just test
         ADD MAXIMUM NUMBER OF INTERVIEWS PER PERSON - Appears to work, just test
         ADD NOT AVAILABLE SLOTS
         IMPLEMENT FACULTY SIMILARY MATRIX
         ADD MATCHMAKING BASED ON TRACK (NEURAL, BIOMECHANICS, IMAGING, BIOMATERIALS)  
-        ACCEPT TIME VECTOR FOR PRINTING TO SCHEDULE
         PRINT PREFERENCE ON OUPUT FOR DEBUGGING ONLY
         VALIDATE THAT EVERYTHING WORKS USING LAST YEAR'S MATCHES
         ENSURE THAT ALL STUDENTS GET FAIR MATCHES, REGARDLESS OF PLACE ON LIST
@@ -73,6 +73,8 @@ class match_maker():
         self.LUNCH_PERIOD = 4
         self.USE_RECRUITING = True
         self.RECRUITING_WEIGHT = 10
+        
+        self.EMPTY_PENALTY = 1000 # This is a positive number, it will be made negative when used
         
         # Calculated parameters
         self.all_interviews = range(self.NUM_INTERVIEWS)
@@ -361,7 +363,7 @@ class match_maker():
                         
             header = np.empty((header_size, 2), dtype=object)
             header[0, 0] = "Student"
-            header[0, 1] = self.faculty_names[p]
+            header[0, 1] = self.student_names[s]
             header[1, 0] = ''
             header[1, 1] = ''
             header[2, 0] = '   Time    '
@@ -373,6 +375,7 @@ class match_maker():
             student_schedule = np.asarray(self.student_schedule[s])
             student_schedule = np.reshape(student_schedule, (-1, 1))
             schedule = np.concatenate((times, student_schedule), axis=1)
+            
             np.savetxt(filename, schedule,
                        delimiter=":   ", fmt='%s')
         
@@ -398,7 +401,7 @@ class match_maker():
 
             
         filename = path.join(self.PATH,
-                             'matches_text.txt')
+                             'matches.txt')
         np.savetxt(filename, matches_2_print,
                    delimiter="", fmt='%15s')
             
@@ -590,9 +593,12 @@ class match_maker():
             model.Add(num_interviews_prof <= self.MAX_INTERVIEWS)
         
         # Define the minimization of cost
+        print('Building Maximization term...')
         model.Maximize(
-            sum(cost_matrix[i][s][p] * interview[(p, s, i)] for p in self.all_faculty 
-                for s in self.all_students for i in self.all_interviews))
+            sum(cost_matrix[i][s][p] * interview[(p, s, i)] + self.EMPTY_PENALTY * interview[(p, s, i)]
+            for p in self.all_faculty
+            for s in self.all_students
+            for i in self.all_interviews))
         
         # Creates the solver and solve.
         print('Building Model...', flush=True)
