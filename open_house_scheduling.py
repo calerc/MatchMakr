@@ -14,22 +14,22 @@ from __future__ import print_function
         Can weight faculty preferences higher/lower than student choices
         Generates human-readable .csv schedules
         Generates human-readable un-ordered match list
+        Allows faculty to request no interviews during lunch
+        Give recruiting faculty an advantage in who they choose
         
         
     Future features:
         MINIMIZE NUMBER OF EMPTY SLOTS
         ADD MINIMUM NUMBER OF INTERVIEWS (HARD LIMIT) - Appears to work, just test
         ADD MAXIMUM NUMBER OF INTERVIEWS PER PERSON - Appears to work, just test
-        GIVE RECRUITING FACULTY AN ADVANTAGE
-        ASSIGN COST TO HAVING NO LUNCH BREAK
         ADD NOT AVAILABLE SLOTS
         IMPLEMENT FACULTY SIMILARY MATRIX
-        ENSURE THAT ALL STUDENTS GET FAIR MATCHES, REGARDLESS OF PLACE ON LIST
-        INCREASE 'BENEFIT' OF FIRST THREE CHOICES
         ADD MATCHMAKING BASED ON TRACK (NEURAL, BIOMECHANICS, IMAGING, BIOMATERIALS)  
         ACCEPT TIME VECTOR FOR PRINTING TO SCHEDULE
         PRINT PREFERENCE ON OUPUT FOR DEBUGGING ONLY
         VALIDATE THAT EVERYTHING WORKS USING LAST YEAR'S MATCHES
+        ENSURE THAT ALL STUDENTS GET FAIR MATCHES, REGARDLESS OF PLACE ON LIST
+        CREATE GOOGLE SURVEYS
         CREATE GUI
 '''
 
@@ -59,6 +59,7 @@ class match_maker():
         self.PATH = "/home/cale/Desktop/open_house/fresh_start"
         self.STUDENT_PREF = "student_preferences.csv"
         self.FACULTY_PREF = "faculty_preferences.csv"
+        self.TIMES_NAME = "interview_times.csv"
         
         self.student_names = []
         self.faculty_names = []
@@ -66,6 +67,12 @@ class match_maker():
         self.USE_RANKING = True
         self.MAX_RANKING = 10
         self.CHOICE_EXPONENT = 2
+        
+        self.USE_WORK_LUNCH = True
+        self.LUNCH_PENALTY = 10     # This is a positive number, it will be made negative when used
+        self.LUNCH_PERIOD = 4
+        self.USE_RECRUITING = True
+        self.RECRUITING_WEIGHT = 10
         
         # Calculated parameters
         self.all_interviews = range(self.NUM_INTERVIEWS)
@@ -80,7 +87,20 @@ class match_maker():
             self.FACULTY_ADVANTAGE = int_faculty_advantage
             warnings.warn('Faculty Advantage must be an integer, rounding to the nearest integer')
 
-   
+    ''' Loads the interview times from a csv '''
+    def load_interview_times(self):
+        
+        self.interview_times = []        
+        with open(path.join(self.PATH, self.TIMES_NAME), 'r') as csvfile:
+            reader = csv.reader(csvfile, delimiter=',')
+            for row in reader:
+                self.interview_times.append(row)
+                
+        
+        self.NUM_INTERVIEWS = len(self.interview_times)
+                
+        
+    
     ''' Old load function.  Here for documentation '''
     def load_data_defunct(self):
     
@@ -162,7 +182,10 @@ class match_maker():
     ''' Load the data '''
     def load_data(self):      
         
-        # Load the data
+        # Load the interview times
+        self.load_interview_times()
+        
+        # Load the preference data
         self.student_pref = self.load_data_from_human_readable(self.STUDENT_PREF)
         self.faculty_pref = self.load_data_from_human_readable(self.FACULTY_PREF)
         self.student_pref = self.add_names_to_match_data(self.student_pref, self.faculty_pref)
@@ -171,24 +194,60 @@ class match_maker():
         self.student_pref = self.add_names_to_match_data(self.student_pref, self.carol_matches)
         self.faculty_pref = self.add_names_to_match_data(self.faculty_pref, self.carol_matches)
         
+        # Load the lunch and recruiting weight data
+        if self.USE_RECRUITING:
+            self.is_recruiting = self.load_data_from_human_readable('faculty_is_recruiting.csv', False)
+            self.is_recruiting = self.response_to_weight(self.is_recruiting)
+            
+        if self.USE_WORK_LUNCH:
+            self.will_work_lunch = self.load_data_from_human_readable('faculty_work_lunch.csv', False)
+            self.will_work_lunch = self.response_to_weight(self.will_work_lunch)
+        
         # Calculate the cost matrix
         self.calc_cost_matrix()
-
+    
+    
+    ''' Transform yes/no/maybe into 1/2/3 '''
+    def response_to_weight(self, array):
+        array = array.flatten()
         
+        out_array = np.empty(np.shape(array))
+        for count, response in enumerate(array):
+            if response.lower() == 'yes':
+                out_array[count] = 2
+            elif response.lower() == 'no':
+                out_array[count] = 0
+            elif response.lower() == 'maybe':
+                out_array[count] = 1
+                
+        return out_array
         
     ''' Transform the data into cost matrix'''
     def calc_cost_matrix(self):
-                
+        
+        # Determine how to weight faculty preferences over student preferences
         alpha = self.FACULTY_ADVANTAGE
         beta = 100 - alpha
-        
         self.cost_matrix = (alpha * self.faculty_pref + beta * self.student_pref).astype(int)
+        
+        # Give recruiting faculty an advantage
+        if self.USE_RECRUITING:
+            self.cost_matrix += (self.is_recruiting * self.RECRUITING_WEIGHT).astype(np.int64)
+
+        # Expand the cost_matrix to cover each interview period        
         self.cost_matrix = np.reshape(self.cost_matrix,
                                       (1, self.num_students, self.num_faculty))
         self.cost_matrix = np.repeat(self.cost_matrix, self.NUM_INTERVIEWS, axis=0)
         
+        # Add a cost for working during lunch
+        if self.USE_WORK_LUNCH:
+            self.cost_matrix[self.LUNCH_PERIOD, :, :] -= ((2 - self.will_work_lunch) * self.LUNCH_PENALTY).astype(np.int64) # The 2 is the maximum number of points we can remove for lunch weight because of response_to_weight
+            
         # Square the cost matrix to maximize chance of getting first choice
+        #self.cost_matrix[self.cost_matrix < 0] = 0
+        cost_sign = np.sign(self.cost_matrix)
         self.cost_matrix = np.power(self.cost_matrix, self.CHOICE_EXPONENT)
+        self.cost_matrix *= cost_sign
 
     ''' Randomly generate prefered matches for testing '''
     def define_random_matches(self):
@@ -242,7 +301,11 @@ class match_maker():
                 if not found_match:
                     temp_list.append('Free')               
             self.faculty_schedule.append(temp_list)
-            
+        
+        times = np.asarray(self.interview_times)
+        times.flatten()
+        header_size = 3
+        
         if not path.exists(path.join(self.PATH, 'faculty_schedules')):
             makedirs(path.join(self.PATH, 'faculty_schedules'))
         
@@ -251,8 +314,23 @@ class match_maker():
             filename = path.join(self.PATH,
                                  'faculty_schedules',
                                  faculty_name)
-            np.savetxt(filename, self.faculty_schedule[p],
-                       delimiter="\n", fmt='%s')
+            faculty_schedule = np.asarray(self.faculty_schedule[p])
+            faculty_schedule = np.reshape(faculty_schedule, (-1, 1))
+            schedule = np.concatenate((times, faculty_schedule), axis=1)
+            
+            header = np.empty((header_size, 2), dtype=object)
+            header[0, 0] = "Faculty"
+            header[0, 1] = self.faculty_names[p]
+            header[1, 0] = ''
+            header[1, 1] = ''
+            header[2, 0] = '   Time    '
+            header[2, 1] = 'Student:'
+
+            
+            schedule = np.concatenate((header, schedule), axis=0)
+            
+            np.savetxt(filename, schedule,
+                       delimiter=":   ", fmt='%s')
             
             
         # Interview - Student Schedule     
@@ -279,8 +357,24 @@ class match_maker():
             filename = path.join(self.PATH,
                                  'student_schedules',
                                  student_name)
-            np.savetxt(filename, self.student_schedule[s],
-                       delimiter="\n", fmt='%s')
+            
+                        
+            header = np.empty((header_size, 2), dtype=object)
+            header[0, 0] = "Student"
+            header[0, 1] = self.faculty_names[p]
+            header[1, 0] = ''
+            header[1, 1] = ''
+            header[2, 0] = '   Time    '
+            header[2, 1] = 'Faculty:'
+            
+            schedule = np.concatenate((header, schedule), axis=0)
+            
+            
+            student_schedule = np.asarray(self.student_schedule[s])
+            student_schedule = np.reshape(student_schedule, (-1, 1))
+            schedule = np.concatenate((times, student_schedule), axis=1)
+            np.savetxt(filename, schedule,
+                       delimiter=":   ", fmt='%s')
         
         # Matches
         self.matches_text = []        
@@ -358,7 +452,7 @@ class match_maker():
             The next columns will contain data
         
     '''
-    def load_data_from_human_readable(self, filename):
+    def load_data_from_human_readable(self, filename, append_name=True):
         
         # Load the data
         match_data = []
@@ -385,33 +479,27 @@ class match_maker():
             for count2, name2 in enumerate(name):
                 all_students[count][count2] = name2.replace(' ', '')
         
-        # Get the unique student names
-        self.get_unique_student_names(all_students)
-        
-        # Put the match data in an array
-        match_data_output = np.zeros((self.num_students, self.num_faculty))
-        max_requests_made = np.shape(all_students)[0]
-        name_array = np.asarray(self.student_names)
-        for request_num in range(max_requests_made):
-            for p in self.all_faculty:
-                student_num = np.where(all_students[request_num, p] == name_array)
-                if np.shape(student_num) == (1, 1):
-                    if self.USE_RANKING:
-                        match_data_output[student_num, p] = self.MAX_RANKING - request_num
-                        if match_data_output[student_num, p] < 0:
-                            match_data_output[student_num, p] = 0
-                    else:
-                        match_data_output[student_num, p] = 1
-                
+        if append_name:
+            # Get the unique student names
+            self.get_unique_student_names(all_students)
+            
+            # Put the match data in an array
+            match_data_output = np.zeros((self.num_students, self.num_faculty))
+            max_requests_made = np.shape(all_students)[0]
+            name_array = np.asarray(self.student_names)
+            for request_num in range(max_requests_made):
+                for p in self.all_faculty:
+                    student_num = np.where(all_students[request_num, p] == name_array)
+                    if np.shape(student_num) == (1, 1):
+                        if self.USE_RANKING:
+                            match_data_output[student_num, p] = self.MAX_RANKING - request_num
+                            if match_data_output[student_num, p] < 0:
+                                match_data_output[student_num, p] = 0
+                        else:
+                            match_data_output[student_num, p] = 1
+        else:
+            match_data_output = all_students
 
-
-        '''
-        self.carol_faculty = faculty_names
-        self.carol_students = student_names.tolist()
-        self.carol_matches = all_students
-        
-        self.load_carol_matches()
-        '''
         return match_data_output
         
         
