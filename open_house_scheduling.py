@@ -74,7 +74,7 @@ class match_maker():
         self.USE_RECRUITING = True
         self.RECRUITING_WEIGHT = 10
         
-        self.EMPTY_PENALTY = 1000 # This is a positive number, it will be made negative when used
+        self.EMPTY_PENALTY = 500  # 500 # This is a positive number, it will be made negative when used
         
         # Calculated parameters
         self.all_interviews = range(self.NUM_INTERVIEWS)
@@ -594,11 +594,19 @@ class match_maker():
         
         # Define the minimization of cost
         print('Building Maximization term...')
-        model.Maximize(
-            sum(cost_matrix[i][s][p] * interview[(p, s, i)] + self.EMPTY_PENALTY * interview[(p, s, i)]
-            for p in self.all_faculty
-            for s in self.all_students
-            for i in self.all_interviews))
+        if self.EMPTY_PENALTY != 0:
+            model.Maximize(
+                sum(cost_matrix[i][s][p] * interview[(p, s, i)]
+                    + self.EMPTY_PENALTY * interview[(p, s, i)]
+                for p in self.all_faculty
+                for s in self.all_students
+                for i in self.all_interviews))
+        else:
+            model.Maximize(
+                sum(cost_matrix[i][s][p] * interview[(p, s, i)]
+                for p in self.all_faculty
+                for s in self.all_students
+                for i in self.all_interviews))
         
         # Creates the solver and solve.
         print('Building Model...', flush=True)
