@@ -36,7 +36,6 @@ from __future__ import print_function
         CREATE GUI
         ENSURE THAT PARAMETERS DON'T INTERFERE WITH EACH OTHER
         ERROR-CHECK ANY INPUTS
-        REORDER FUNCTIONS
         CREATE PUBLIC GITHUB
         FIND SOMEWHERE TO HOST BINARIES
         VIDEO TO YOUTUBE
@@ -82,6 +81,10 @@ class match_maker():
         self.LUNCH_PERIOD = 4
         self.USE_RECRUITING = True
         self.RECRUITING_WEIGHT = 10
+        
+        self.USE_AVAILABILITY = True
+        self.FACULTY_AVAILABILITY_NAME = 'faculty_availability.csv'
+        self.STUDENT_AVAILABILITY_NAME = 'student_availability.csv'
         
         self.EMPTY_PENALTY = 500  # 500 # This is a positive number, it will be made negative when used # Make zero to not use
         
@@ -228,6 +231,20 @@ class match_maker():
         
         print(self.student_names)
         
+        
+    '''
+        Load the availability data for students or faculty
+    '''
+    def load_availability(self, filename):
+        
+        # Load the availability
+        availability = self.load_data_from_human_readable(filename, False).astype(int)
+        
+        # NEED TO CHECK THAT THE SIZE OF THE DATA IS VALID
+        return availability
+    
+
+        
     ''' 
         Load Carol's previous matches as a comparison 
         This can be deleted once the validity of this method has been verified
@@ -271,6 +288,11 @@ class match_maker():
         self.carol_matches = self.load_data_from_human_readable('assignments.csv') # Remove this after testing
         self.student_pref = self.add_names_to_match_data(self.student_pref, self.carol_matches)
         self.faculty_pref = self.add_names_to_match_data(self.faculty_pref, self.carol_matches)
+        
+        # Load the availability data
+        if self.USE_AVAILABILITY:
+            self.student_availability = self.load_availability(self.STUDENT_AVAILABILITY_NAME)
+            self.faculty_availability = self.load_availability(self.FACULTY_AVAILABILITY_NAME)
         
         # Load the lunch and recruiting weight data
         if self.USE_RECRUITING:
@@ -424,6 +446,16 @@ class match_maker():
         
         self.NUM_INTERVIEWS = len(self.interview_times)
         
+    '''
+        Load matrix data
+        The first 3 rows are ignored
+        The first column is ignore
+    '''
+    #def load_matrix_data(self, filename):
+        
+        
+     #   return matrix_data
+        
 
     ''' Make the matches '''
     def main(self):
@@ -438,41 +470,48 @@ class match_maker():
         
         # Creates interview variables.
         # interview[(p, s, i)]: professor 'p' interviews student 's' for interview number 'i'
-        interview = {}
+        self.interview = {}
         for p in self.all_faculty:
             for s in self.all_students:
                 for i in self.all_interviews:
-                    interview[(p, s,
+                    self.interview[(p, s,
                             i)] = model.NewBoolVar('interview_n%id%is%i' % (p, s, i))
     
         # Each student has no more than one interview at a time
         for p in self.all_faculty:
             for i in self.all_interviews:
-                model.Add(sum(interview[(p, s, i)] for s in self.all_students) <= 1)
+                model.Add(sum(self.interview[(p, s, i)] for s in self.all_students) <= 1)
     
         # Each professor has no more than one student per interview
         for s in self.all_students:
             for i in self.all_interviews:
-                model.Add(sum(interview[(p, s, i)] for p in self.all_faculty) <= 1)
+                model.Add(sum(self.interview[(p, s, i)] for p in self.all_faculty) <= 1)
     
         # No student is assigned to the same professor twice
         for s in self.all_students:
             for p in self.all_faculty:
-                model.Add(sum(interview[(p, s, i)] for i in self.all_interviews) <= 1)
-    
+                model.Add(sum(self.interview[(p, s, i)] for i in self.all_interviews) <= 1)
+                
+        # Interviews only assigned when both parties are available
+        if self.USE_AVAILABILITY:
+            for p in self.all_faculty:
+                for s in self.all_students:
+                    for i in self.all_interviews:
+                        model.Add(self.interview[(p, s, i)] == self.student_availability[i, s])
+                        model.Add(self.interview[(p, s, i)] == self.faculty_availability[i, p])
     
     
         # Ensure that no student gets too many or too few interviews
         for s in self.all_students:
             num_interviews_stud = sum(
-                interview[(p, s, i)] for p in self.all_faculty for i in self.all_interviews)
+                self.interview[(p, s, i)] for p in self.all_faculty for i in self.all_interviews)
             model.Add(self.MIN_INTERVIEWS <= num_interviews_stud)
             model.Add(num_interviews_stud <= self.MAX_INTERVIEWS)
     
         # Ensure that no professor gets too many or too few interviews
         for p in self.all_faculty:
             num_interviews_prof = sum(
-                interview[(p, s, i)] for s in self.all_students for i in self.all_interviews)
+                self.interview[(p, s, i)] for s in self.all_students for i in self.all_interviews)
             model.Add(self.MIN_INTERVIEWS <= num_interviews_prof)
             model.Add(num_interviews_prof <= self.MAX_INTERVIEWS)
         
@@ -480,14 +519,14 @@ class match_maker():
         print('Building Maximization term...')
         if self.EMPTY_PENALTY != 0:
             model.Maximize(
-                sum(cost_matrix[i][s][p] * interview[(p, s, i)]
-                    + self.EMPTY_PENALTY * interview[(p, s, i)]
+                sum(cost_matrix[i][s][p] * self.interview[(p, s, i)]
+                    + self.EMPTY_PENALTY * self.interview[(p, s, i)]
                 for p in self.all_faculty
                 for s in self.all_students
                 for i in self.all_interviews))
         else:
             model.Maximize(
-                sum(cost_matrix[i][s][p] * interview[(p, s, i)]
+                sum(cost_matrix[i][s][p] * self.interview[(p, s, i)]
                 for p in self.all_faculty
                 for s in self.all_students
                 for i in self.all_interviews))
@@ -506,31 +545,35 @@ class match_maker():
  
         
         # Collect results
-        results = np.empty((self.NUM_INTERVIEWS, self.num_students, self.num_faculty))
-        for i in self.all_interviews:
-            for p in self.all_faculty:
-                for s in self.all_students:
-                    results[i][s][p] = solver.Value(interview[(p, s, i)])
-                    
-        print(results)
+        if solver.StatusName(status) == 'FEASIBLE' or solver.StatusName(status) == 'OPTIMAL':
+            results = np.empty((self.NUM_INTERVIEWS, self.num_students, self.num_faculty))
+            for i in self.all_interviews:
+                for p in self.all_faculty:
+                    for s in self.all_students:
+                        results[i][s][p] = solver.Value(self.interview[(p, s, i)])
+            print(results)     
+        
              
-        # Save the results
-        self.results = results
-        self.solver = solver
-        self.matches = np.sum(self.results, axis=0).astype(bool)
+            # Save the results
+            self.results = results
+            self.solver = solver
+            self.matches = np.sum(self.results, axis=0).astype(bool)
+            
+            # Convert the results to text
+            self.matches_as_text()
+            
+            # Write the results to a file
+            #np.savetxt(path.join(self.PATH, 'results.csv'), results, delimiter=",")
+            self.print_numpy_arrays('results.csv', self.results)
+            np.savetxt(path.join(self.PATH, 'matches.csv'),
+                       self.matches, delimiter=",",
+                       fmt='%i')
+            
+            # Check the percentage of preferences met
+            self.check_preferences()
         
-        # Convert the results to text
-        self.matches_as_text()
-        
-        # Write the results to a file
-        #np.savetxt(path.join(self.PATH, 'results.csv'), results, delimiter=",")
-        self.print_numpy_arrays('results.csv', self.results)
-        np.savetxt(path.join(self.PATH, 'matches.csv'),
-                   self.matches, delimiter=",",
-                   fmt='%i')
-        
-        # Check the percentage of preferences met
-        self.check_preferences()
+        else:
+            print('-------- Solver failed! --------')
         
         
     ''' Convert the boolean matrix to a string matrix '''
