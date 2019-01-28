@@ -17,15 +17,14 @@ from __future__ import print_function
         Allows faculty to request no interviews during lunch
         Give recruiting faculty an advantage in who they choose
         Outputs a schedule with a time vector read from a csv
-        Excepts penalty for empty interview slots
-        Excepts a hard limit to maximum number of interviews
-        Excepts a hard limit to minimum number of interviews
+        Accepts penalty for empty interview slots
+        Accepts a hard limit to maximum number of interviews
+        Accepts a hard limit to minimum number of interviews
         Can print preference number to schedules (for debugging)
+        Accepts "not available" slots (BUT THIS IS BUGGY)
         
         
     Future features:
-        CHANGE HOW WE INPUT STUDENT PREFERENCES SO THAT THEY ARE ORDERED
-        ADD NOT AVAILABLE SLOTS
         ADD MATCHMAKING BASED ON TRACK (NEURAL, BIOMECHANICS, IMAGING, BIOMATERIALS)
         IMPLEMENT FACULTY SIMILARY MATRIX        
         VALIDATE THAT EVERYTHING WORKS USING LAST YEAR'S MATCHES
@@ -61,13 +60,13 @@ class match_maker():
         self.FACULTY_ADVANTAGE = 50
         self.NUM_INTERVIEWS = 10
         
-        self.USE_NUM_INTERVIEWS = False
-        self.MIN_INTERVIEWS = 0
+        self.USE_NUM_INTERVIEWS = True
+        self.MIN_INTERVIEWS = 3
         self.MAX_INTERVIEWS = 10
         #self.NUM_EXTRA_SLOTS = 2
         
         self.PATH = "/home/cale/Desktop/open_house/fresh_start"
-        self.STUDENT_PREF = "student_preferences.csv"
+        self.STUDENT_PREF = "stud_pref_order.csv"
         self.FACULTY_PREF = "faculty_preferences.csv"
         self.TIMES_NAME = "interview_times.csv"
         
@@ -78,14 +77,14 @@ class match_maker():
         self.MAX_RANKING = 10
         self.CHOICE_EXPONENT = 2
         
-        self.USE_WORK_LUNCH = False
+        self.USE_WORK_LUNCH = True
         self.LUNCH_PENALTY = 10     # This is a positive number, it will be made negative when used
         self.LUNCH_PERIOD = 4
         
-        self.USE_RECRUITING = False
+        self.USE_RECRUITING = True
         self.RECRUITING_WEIGHT = 10
         
-        self.USE_AVAILABILITY = True
+        self.USE_AVAILABILITY = False
         self.FACULTY_AVAILABILITY_NAME = 'faculty_availability.csv'
         self.STUDENT_AVAILABILITY_NAME = 'student_availability.csv'
         
@@ -293,13 +292,14 @@ class match_maker():
         self.load_interview_times()
         
         # Load the preference data
-        self.student_pref = self.load_data_from_human_readable(self.STUDENT_PREF)
-        self.faculty_pref = self.load_data_from_human_readable(self.FACULTY_PREF)
-        self.student_pref = self.add_names_to_match_data(self.student_pref, self.faculty_pref)
+        self.load_preference_data()
+        #self.student_pref = self.load_data_from_human_readable(self.STUDENT_PREF)
+        #self.faculty_pref = self.load_data_from_human_readable(self.FACULTY_PREF)
+        #self.student_pref = self.add_names_to_match_data(self.student_pref, self.faculty_pref)
         
         self.carol_matches = self.load_data_from_human_readable('assignments.csv') # Remove this after testing
-        self.student_pref = self.add_names_to_match_data(self.student_pref, self.carol_matches)
-        self.faculty_pref = self.add_names_to_match_data(self.faculty_pref, self.carol_matches)
+        #self.student_pref = self.add_names_to_match_data(self.student_pref, self.carol_matches)
+        #self.faculty_pref = self.add_names_to_match_data(self.faculty_pref, self.carol_matches)
         
         
         # Load the lunch and recruiting weight data
@@ -393,7 +393,85 @@ class match_maker():
             self.student_names[s] = self.student_names[s].replace("'", "")
             self.student_names[s] = self.student_names[s].replace(" " , "")
 
+    
+    '''
+        Load the preference data
+    '''
+    def load_preference_data(self):
+        
+        # Load the student data
+        stud_match_data = []
+        with open(path.join(self.PATH, self.STUDENT_PREF), 'r') as csvfile:
+            reader = csv.reader(csvfile, delimiter=',')
+            for row in reader:
+                stud_match_data.append(row)
+                
+        # Load the faculty data
+        faculty_match_data = []
+        with open(path.join(self.PATH, self.FACULTY_PREF), 'r') as csvfile:
+            reader = csv.reader(csvfile, delimiter=',')
+            for row in reader:
+                faculty_match_data.append(row)
+                
+        # Make the data into numpy arrays
+        stud_match_data = np.asarray(stud_match_data)
+        faculty_match_data = np.asarray(faculty_match_data)
+        
+        # Extract the names
+        student_names = stud_match_data[1,1:]
+        student_names = student_names[np.where(student_names != '')]
+        faculty_names = faculty_match_data[1,1:]
+        faculty_names = faculty_names[np.where(faculty_names != '')]
+        
+        # Extract the preferences
+        student_pref = stud_match_data[3:, 1:]
+        faculty_pref = faculty_match_data[3:, 1:]
+        
+        # Statistics
+        self.num_students = len(student_names)
+        self.num_faculty = len(faculty_names)
+        self.all_students = range(self.num_students)
+        self.all_faculty = range(self.num_faculty)
+        
+        # Remove spaces from names and preferences
+        for count, name in enumerate(student_names):
+            student_names[count] = student_names[count].replace(' ', '')
+        
+        for count, name in enumerate(faculty_names):
+            faculty_names[count] = faculty_names[count].replace(' ', '')
+            
+        for count, pref in enumerate(student_pref):
+            for count2, pref2 in enumerate(pref):
+                student_pref[count, count2] = student_pref[count, count2].replace(' ', '')
+                
+        for count, pref in enumerate(faculty_pref):
+            for count2, pref2 in enumerate(pref):
+                faculty_pref[count, count2] = faculty_pref[count, count2].replace(' ', '')
+                
+        # Fill-in faculty preferences
+        self.faculty_pref = np.zeros((self.num_students, self.num_faculty))
+        
+        for p in self.all_faculty:
+            temp_pref = faculty_pref[np.where(faculty_pref[:, p] != ''), p].flatten()
+            for count, pref in enumerate(temp_pref):
+                student_num = np.where(student_names == pref)
+                self.faculty_pref[student_num, p] = self.MAX_RANKING - count
+                
+        # Fill-in student preferences
+        self.student_pref = np.zeros((self.num_students, self.num_faculty))
+          
+        for s in self.all_students:
+            temp_pref = student_pref[np.where(student_pref[:, s] != ''), s].flatten()
+            for count, pref in enumerate(temp_pref):
+                faculty_num = np.where(faculty_names == pref)
+                self.student_pref[s, faculty_num] = self.MAX_RANKING - count
+        
+        # Assign object names
+        self.student_names = student_names
+        self.faculty_names = faculty_names
 
+
+    
     ''' 
         Read requests from human-readable format 
         Rows:
@@ -414,7 +492,11 @@ class match_maker():
             reader = csv.reader(csvfile, delimiter=',')
             for row in reader:
                 match_data.append(row)
+                
+        match_data = np.asarray(match_data)
         
+        match_data_output = match_data[3:, 1:]
+        '''
         # Get the faculty names
         if not self.faculty_names:
             self.faculty_names = match_data[1][1:]
@@ -453,7 +535,7 @@ class match_maker():
                             match_data_output[student_num, p] = 1
         else:
             match_data_output = all_students
-
+            '''
         return match_data_output
         
         
