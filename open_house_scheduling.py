@@ -22,19 +22,22 @@ from __future__ import print_function
         Accepts a hard limit to minimum number of interviews
         Can print preference number to schedules (for debugging)
         Accepts "not available" slots (BUT THIS IS BUGGY)
+        Accepts a vector to match people based on their track
+        Accepts an interviewer similarity score
         
         
-    Future features:
-        ADD MATCHMAKING BASED ON TRACK (NEURAL, BIOMECHANICS, IMAGING, BIOMATERIALS)
-        IMPLEMENT FACULTY SIMILARY MATRIX        
+    Future features:   
         VALIDATE THAT EVERYTHING WORKS USING LAST YEAR'S MATCHES
         ENSURE THAT ALL STUDENTS GET FAIR MATCHES, REGARDLESS OF PLACE ON LIST
         SUGGEST MATCHES FOR FREE SPOTS
         CREATE GOOGLE SURVEYS
-        MAKE THE SCHEDULES MORE BEAUTIFUL
+        MAKE THE SCHEDULES MORE BEAUTIFUL - MAKE PRINT FUNCTION FOR SCHEDULES
         CREATE GUI
         ENSURE THAT PARAMETERS DON'T INTERFERE WITH EACH OTHER
         ERROR-CHECK ANY INPUTS
+        MAKE FILES CONSTANTS
+        MAKE TIME LIMIT FOR SOLVER
+        LET STUDENTS KNOW IF MATCH OR "RANDOM"
         CREATE PUBLIC GITHUB
         FIND SOMEWHERE TO HOST BINARIES
         VIDEO TO YOUTUBE
@@ -88,6 +91,13 @@ class match_maker():
         self.FACULTY_AVAILABILITY_NAME = 'faculty_availability.csv'
         self.STUDENT_AVAILABILITY_NAME = 'student_availability.csv'
         
+        self.USE_TRACKS = False
+        self.TRACK_WEIGHT = 1
+        
+        self.USE_FACULTY_SIMILARITY = True
+        self.FACULTY_SIMILARITY_WEIGHT = 2
+        self.NUM_SIMILAR_FACULTY = 5
+        
         # Avoid using - it's slow
         # This number should be chosen so that it is larger than lunch penalty
         self.EMPTY_PENALTY = 0  # 500 # This is a positive number, it will be made negative when used # Make zero to not use
@@ -131,6 +141,26 @@ class match_maker():
         # Give recruiting faculty an advantage
         if self.USE_RECRUITING:
             self.cost_matrix += (self.is_recruiting * self.RECRUITING_WEIGHT).astype(np.int64)
+            
+        # Add a benefit for being in the same track, but only if currently not
+        # matched
+        not_matched = self.cost_matrix == 0
+        if self.USE_TRACKS:
+            add_track_advantage = np.logical_and(not_matched, self.same_track == 1)
+            self.cost_matrix[add_track_advantage] += self.TRACK_WEIGHT
+            
+        # Add a benefit to similar faculty, if not matched, for students top n faculty
+        if self.USE_FACULTY_SIMILARITY:
+            for s in self.all_students:
+                for p in range(self.NUM_SIMILAR_FACULTY):
+                    match_benefit = self.MAX_RANKING - p
+                    faculty_choice = np.where(self.student_pref[s, :] == match_benefit)
+                    if np.shape(faculty_choice)[1] > 0:
+                        was_not_matched = np.where(not_matched[s, :])
+                        similar_faculty = self.faculty_similarity[was_not_matched, faculty_choice]
+                        self.cost_matrix[s, was_not_matched] += similar_faculty * self.FACULTY_SIMILARITY_WEIGHT
+            
+            #self.cost_matrix[not_matched] += (self.faculty_similarity[not_matched] * self.FACULTY_SIMILARITY_WEIGHT)
 
         # Expand the cost_matrix to cover each interview period        
         self.cost_matrix = np.reshape(self.cost_matrix,
@@ -141,6 +171,7 @@ class match_maker():
         if self.USE_WORK_LUNCH:
             self.cost_matrix[self.LUNCH_PERIOD, :, :] -= ((2 - self.will_work_lunch) * self.LUNCH_PENALTY).astype(np.int64) # The 2 is the maximum number of points we can remove for lunch weight because of response_to_weight
             
+                    
         # Square the cost matrix to maximize chance of getting first choice
         #self.cost_matrix[self.cost_matrix < 0] = 0
         cost_sign = np.sign(self.cost_matrix)
@@ -283,7 +314,60 @@ class match_maker():
                 
         # Populate the array with Carols names and matches
         a = 1
-
+        
+    
+    '''
+        Load track data
+    '''
+    def load_track_data(self):
+        
+        # Get the track data from files
+        self.faculty_tracks = self.load_data_from_human_readable('faculty_tracks.csv')
+        self.student_tracks = self.load_data_from_human_readable('student_tracks.csv')
+        
+        # Find students and faculty that are in the same track
+        all_tracks = np.concatenate((self.faculty_tracks, self.student_tracks), axis=1)
+        unique_tracks, unique_idx = np.unique(all_tracks, return_inverse=True)
+        
+        self.same_track = np.zeros((self.num_students, self.num_faculty))
+        for count, track in enumerate(unique_tracks):
+            if track != 'None' and track != '':
+                same_track = np.asarray(np.where(unique_idx == count))
+                faculty_nums = np.reshape(same_track[same_track < self.num_faculty], (1, -1))
+                student_nums = np.reshape(same_track[same_track >= self.num_faculty] - self.num_faculty, (-1, 1))
+                
+                self.same_track[student_nums, faculty_nums] = 1
+    
+    '''
+        Load matrix data
+    '''
+    def load_matrix_data(self, filename):
+        matrix_data = []
+        
+        with open(path.join(self.PATH, filename), 'r') as csvfile:
+            reader = csv.reader(csvfile, delimiter=',')
+            for row in reader:
+                matrix_data.append(row)
+        
+        return(matrix_data)
+    
+    
+    '''
+        Load faculty similarity matrix
+    '''
+    def load_faculty_similarity(self):
+        
+        # Load the matrix data
+        self.faculty_similarity = self.load_matrix_data('faculty_similarity.csv')
+        
+        # Convert to an array
+        self.faculty_similarity = np.asarray(self.faculty_similarity, dtype=int)
+        
+        # Check that the array size is correct
+        num_rows, num_columns = np.shape(self.faculty_similarity)
+        if num_rows != self.num_faculty or num_columns != self.num_faculty:
+            raise ValueError('Faculty similarity size does not match the number of faculty')
+        
  
     ''' Load the data '''
     def load_data(self):      
@@ -292,15 +376,16 @@ class match_maker():
         self.load_interview_times()
         
         # Load the preference data
-        self.load_preference_data()
-        #self.student_pref = self.load_data_from_human_readable(self.STUDENT_PREF)
-        #self.faculty_pref = self.load_data_from_human_readable(self.FACULTY_PREF)
-        #self.student_pref = self.add_names_to_match_data(self.student_pref, self.faculty_pref)
-        
+        self.load_preference_data()        
         self.carol_matches = self.load_data_from_human_readable('assignments.csv') # Remove this after testing
-        #self.student_pref = self.add_names_to_match_data(self.student_pref, self.carol_matches)
-        #self.faculty_pref = self.add_names_to_match_data(self.faculty_pref, self.carol_matches)
-        
+
+        # Load the track data
+        if self.USE_TRACKS:
+            self.load_track_data()
+            
+        # Load the faculty similarity data
+        if self.USE_FACULTY_SIMILARITY:
+            self.load_faculty_similarity()
         
         # Load the lunch and recruiting weight data
         if self.USE_RECRUITING:
@@ -493,50 +578,10 @@ class match_maker():
             for row in reader:
                 match_data.append(row)
                 
-        match_data = np.asarray(match_data)
-        
-        match_data_output = match_data[3:, 1:]
-        '''
-        # Get the faculty names
-        if not self.faculty_names:
-            self.faculty_names = match_data[1][1:]
-            self.num_faculty = len(self.faculty_names)
-            self.all_faculty = range(self.num_faculty)
+        match_data = np.asarray(match_data)        
+        match_data = match_data[3:, 1:]
 
-        # Get the student names
-        student_names = match_data[3:]
-        
-        # Make the student names an array
-        all_students = np.asarray(student_names)
-        all_students = all_students[:, 1:]      # This removes the first column, which is emtpy
-        
-        # Remove spaces from names
-        for count, name in enumerate(all_students):
-            for count2, name2 in enumerate(name):
-                all_students[count][count2] = name2.replace(' ', '')
-        
-        if append_name:
-            # Get the unique student names
-            self.get_unique_student_names(all_students)
-            
-            # Put the match data in an array
-            match_data_output = np.zeros((self.num_students, self.num_faculty))
-            max_requests_made = np.shape(all_students)[0]
-            name_array = np.asarray(self.student_names)
-            for request_num in range(max_requests_made):
-                for p in self.all_faculty:
-                    student_num = np.where(all_students[request_num, p] == name_array)
-                    if np.shape(student_num) == (1, 1):
-                        if self.USE_RANKING:
-                            match_data_output[student_num, p] = self.MAX_RANKING - request_num
-                            if match_data_output[student_num, p] < 0:
-                                match_data_output[student_num, p] = 0
-                        else:
-                            match_data_output[student_num, p] = 1
-        else:
-            match_data_output = all_students
-            '''
-        return match_data_output
+        return match_data
         
         
     ''' Loads the interview times from a csv '''
