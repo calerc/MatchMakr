@@ -60,6 +60,8 @@ class match_maker():
         # Constants
         self.FACULTY_ADVANTAGE = 50
         self.NUM_INTERVIEWS = 10
+        
+        self.USE_NUM_INTERVIEWS = False
         self.MIN_INTERVIEWS = 3
         self.MAX_INTERVIEWS = 10
         #self.NUM_EXTRA_SLOTS = 2
@@ -235,13 +237,20 @@ class match_maker():
     '''
         Load the availability data for students or faculty
     '''
-    def load_availability(self, filename):
+    def load_availability(self, filename, num_expected_available):
         
         # Load the availability
         availability = self.load_data_from_human_readable(filename, False).astype(int)
         
-        # NEED TO CHECK THAT THE SIZE OF THE DATA IS VALID
-        return availability
+        # Check that the number of availabilities is expected
+        [_, num_available] = np.shape(availability)
+        if num_available != num_expected_available:
+            raise ValueError('The availability data does not match the preference data')
+            
+        available = np.asarray(np.where(np.any(availability, axis=0))).squeeze()
+        
+        # return
+        return availability, available
     
 
         
@@ -291,8 +300,16 @@ class match_maker():
         
         # Load the availability data
         if self.USE_AVAILABILITY:
-            self.student_availability = self.load_availability(self.STUDENT_AVAILABILITY_NAME)
-            self.faculty_availability = self.load_availability(self.FACULTY_AVAILABILITY_NAME)
+            
+            # Student
+            self.student_availability, self.students_avail = self.load_availability(
+                    self.STUDENT_AVAILABILITY_NAME, len(self.student_names))
+            
+            # Faculty
+            self.faculty_availability, self.faculty_avail = self.load_availability(
+                    self.FACULTY_AVAILABILITY_NAME, len(self.faculty_names))
+            
+            self.remove_unavailable()
         
         # Load the lunch and recruiting weight data
         if self.USE_RECRUITING:
@@ -304,7 +321,7 @@ class match_maker():
             self.will_work_lunch = self.response_to_weight(self.will_work_lunch)
         
         # Calculate the cost matrix
-        self.calc_cost_matrix()    
+        self.calc_cost_matrix()
 
                 
     ''' Old load function.  Here for documentation '''
@@ -493,27 +510,30 @@ class match_maker():
                 model.Add(sum(self.interview[(p, s, i)] for i in self.all_interviews) <= 1)
                 
         # Interviews only assigned when both parties are available
-        if self.USE_AVAILABILITY:
-            for p in self.all_faculty:
-                for s in self.all_students:
-                    for i in self.all_interviews:
-                        model.Add(self.interview[(p, s, i)] == self.student_availability[i, s])
-                        model.Add(self.interview[(p, s, i)] == self.faculty_availability[i, p])
+#        if self.USE_AVAILABILITY:
+#            for p in self.all_faculty:
+#                for s in self.all_students:
+#                    for i in self.all_interviews:
+#                        if self.student_availability[i, s] == 0:
+#                            model.Add(self.interview[(p, s, i)] == 1)
+#                        if self.faculty_availability[i, p] == 0:
+#                            model.Add(self.interview[(p, s, i)] == True)    
     
-    
-        # Ensure that no student gets too many or too few interviews
-        for s in self.all_students:
-            num_interviews_stud = sum(
-                self.interview[(p, s, i)] for p in self.all_faculty for i in self.all_interviews)
-            model.Add(self.MIN_INTERVIEWS <= num_interviews_stud)
-            model.Add(num_interviews_stud <= self.MAX_INTERVIEWS)
-    
-        # Ensure that no professor gets too many or too few interviews
-        for p in self.all_faculty:
-            num_interviews_prof = sum(
-                self.interview[(p, s, i)] for s in self.all_students for i in self.all_interviews)
-            model.Add(self.MIN_INTERVIEWS <= num_interviews_prof)
-            model.Add(num_interviews_prof <= self.MAX_INTERVIEWS)
+#        if self.USE_NUM_INTERVIEWS:
+            
+            # Ensure that no student gets too many or too few interviews
+#            for s in self.all_students:
+#                num_interviews_stud = sum(
+#                    self.interview[(p, s, i)] for p in self.all_faculty for i in self.all_interviews)
+#                model.Add(self.MIN_INTERVIEWS <= num_interviews_stud)
+#                model.Add(num_interviews_stud <= self.MAX_INTERVIEWS)
+        
+            # Ensure that no professor gets too many or too few interviews
+#            for p in self.all_faculty:
+#                num_interviews_prof = sum(
+#                    self.interview[(p, s, i)] for s in self.all_students for i in self.all_interviews)
+#                model.Add(self.MIN_INTERVIEWS <= num_interviews_prof)
+#                model.Add(num_interviews_prof <= self.MAX_INTERVIEWS)
         
         # Define the minimization of cost
         print('Building Maximization term...')
@@ -714,7 +734,26 @@ class match_maker():
             for i in self.all_interviews:
                 for s in self.all_students:
                     writer.writerow(array[i][s][:])
-                print('\n')       
+                print('\n')     
+
+
+    '''
+        Remove students and faculty that are unavailable
+    '''
+    def remove_unavailable(self):
+        
+        # Availability
+        self.student_availability = self.student_availability[:, self.students_avail]        
+        self.faculty_availability = self.faculty_availability[:, self.faculty_avail]
+        
+        # Names
+        self.student_names = np.asarray(self.student_names)[self.students_avail].tolist()
+        self.faculty_names = np.asarray(self.faculty_names)[self.faculty_avail].tolist()
+        
+        # Preferences
+        self.student_pref = self.student_pref[self.students_avail, self.faculty_avail]        
+        self.faculty_pref = self.faculty_pref[self.students_avail, self.faculty_avail]
+        
 
     
     ''' Transform yes/no/maybe into 1/2/3 '''
