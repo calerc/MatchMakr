@@ -62,7 +62,7 @@ class match_maker():
         self.NUM_INTERVIEWS = 10
         
         self.USE_NUM_INTERVIEWS = False
-        self.MIN_INTERVIEWS = 3
+        self.MIN_INTERVIEWS = 0
         self.MAX_INTERVIEWS = 10
         #self.NUM_EXTRA_SLOTS = 2
         
@@ -74,21 +74,24 @@ class match_maker():
         self.student_names = []
         self.faculty_names = []
         
-        self.USE_RANKING = True
+        self.USE_RANKING = True     # True if use preference order instead of binary
         self.MAX_RANKING = 10
         self.CHOICE_EXPONENT = 2
         
-        self.USE_WORK_LUNCH = True
+        self.USE_WORK_LUNCH = False
         self.LUNCH_PENALTY = 10     # This is a positive number, it will be made negative when used
         self.LUNCH_PERIOD = 4
-        self.USE_RECRUITING = True
+        
+        self.USE_RECRUITING = False
         self.RECRUITING_WEIGHT = 10
         
         self.USE_AVAILABILITY = True
         self.FACULTY_AVAILABILITY_NAME = 'faculty_availability.csv'
         self.STUDENT_AVAILABILITY_NAME = 'student_availability.csv'
         
-        self.EMPTY_PENALTY = 500  # 500 # This is a positive number, it will be made negative when used # Make zero to not use
+        # Avoid using - it's slow
+        # This number should be chosen so that it is larger than lunch penalty
+        self.EMPTY_PENALTY = 0  # 500 # This is a positive number, it will be made negative when used # Make zero to not use
         
         self.DEBUG_PRINT_PREFERENCE = True
         
@@ -298,6 +301,16 @@ class match_maker():
         self.student_pref = self.add_names_to_match_data(self.student_pref, self.carol_matches)
         self.faculty_pref = self.add_names_to_match_data(self.faculty_pref, self.carol_matches)
         
+        
+        # Load the lunch and recruiting weight data
+        if self.USE_RECRUITING:
+            self.is_recruiting = self.load_data_from_human_readable('faculty_is_recruiting.csv', False)
+            self.is_recruiting = self.response_to_weight(self.is_recruiting)
+            
+        if self.USE_WORK_LUNCH:
+            self.will_work_lunch = self.load_data_from_human_readable('faculty_work_lunch.csv', False)
+            self.will_work_lunch = self.response_to_weight(self.will_work_lunch)
+        
         # Load the availability data
         if self.USE_AVAILABILITY:
             
@@ -311,14 +324,7 @@ class match_maker():
             
             self.remove_unavailable()
         
-        # Load the lunch and recruiting weight data
-        if self.USE_RECRUITING:
-            self.is_recruiting = self.load_data_from_human_readable('faculty_is_recruiting.csv', False)
-            self.is_recruiting = self.response_to_weight(self.is_recruiting)
-            
-        if self.USE_WORK_LUNCH:
-            self.will_work_lunch = self.load_data_from_human_readable('faculty_work_lunch.csv', False)
-            self.will_work_lunch = self.response_to_weight(self.will_work_lunch)
+
         
         # Calculate the cost matrix
         self.calc_cost_matrix()
@@ -510,30 +516,30 @@ class match_maker():
                 model.Add(sum(self.interview[(p, s, i)] for i in self.all_interviews) <= 1)
                 
         # Interviews only assigned when both parties are available
-#        if self.USE_AVAILABILITY:
-#            for p in self.all_faculty:
-#                for s in self.all_students:
-#                    for i in self.all_interviews:
-#                        if self.student_availability[i, s] == 0:
-#                            model.Add(self.interview[(p, s, i)] == 1)
-#                        if self.faculty_availability[i, p] == 0:
-#                            model.Add(self.interview[(p, s, i)] == True)    
+        if self.USE_AVAILABILITY:
+            for p in self.all_faculty:
+                for s in self.all_students:
+                    for i in self.all_interviews:
+                        if self.student_availability[i, s] == 0:
+                            model.Add(self.interview[(p, s, i)] == 1)
+                        if self.faculty_availability[i, p] == 0:
+                            model.Add(self.interview[(p, s, i)] == True)    
     
-#        if self.USE_NUM_INTERVIEWS:
+        if self.USE_NUM_INTERVIEWS:
             
             # Ensure that no student gets too many or too few interviews
-#            for s in self.all_students:
-#                num_interviews_stud = sum(
-#                    self.interview[(p, s, i)] for p in self.all_faculty for i in self.all_interviews)
-#                model.Add(self.MIN_INTERVIEWS <= num_interviews_stud)
-#                model.Add(num_interviews_stud <= self.MAX_INTERVIEWS)
+            for s in self.all_students:
+                num_interviews_stud = sum(
+                    self.interview[(p, s, i)] for p in self.all_faculty for i in self.all_interviews)
+                model.Add(self.MIN_INTERVIEWS <= num_interviews_stud)
+                model.Add(num_interviews_stud <= self.MAX_INTERVIEWS)
         
             # Ensure that no professor gets too many or too few interviews
-#            for p in self.all_faculty:
-#                num_interviews_prof = sum(
-#                    self.interview[(p, s, i)] for s in self.all_students for i in self.all_interviews)
-#                model.Add(self.MIN_INTERVIEWS <= num_interviews_prof)
-#                model.Add(num_interviews_prof <= self.MAX_INTERVIEWS)
+            for p in self.all_faculty:
+                num_interviews_prof = sum(
+                    self.interview[(p, s, i)] for s in self.all_students for i in self.all_interviews)
+                model.Add(self.MIN_INTERVIEWS <= num_interviews_prof)
+                model.Add(num_interviews_prof <= self.MAX_INTERVIEWS)
         
         # Define the minimization of cost
         print('Building Maximization term...')
@@ -645,7 +651,7 @@ class match_maker():
             if self.DEBUG_PRINT_PREFERENCE:
                 preferences = np.empty((1, header_size + self.NUM_INTERVIEWS), dtype=int)
                 int_num, stud_num = np.where(self.results[:, :, p])
-                preferences[0, header_size + int_num] = self.faculty_pref[stud_num, s]
+                preferences[0, header_size + int_num] = self.faculty_pref[stud_num, p]
                 schedule = np.concatenate((schedule, np.transpose(preferences)), axis=1)
                 
             np.savetxt(filename, schedule,
@@ -750,11 +756,25 @@ class match_maker():
         self.student_names = np.asarray(self.student_names)[self.students_avail].tolist()
         self.faculty_names = np.asarray(self.faculty_names)[self.faculty_avail].tolist()
         
-        # Preferences
-        self.student_pref = self.student_pref[self.students_avail, self.faculty_avail]        
-        self.faculty_pref = self.faculty_pref[self.students_avail, self.faculty_avail]
+        # Match Preferences
+        temp_stud_avail = np.reshape(self.students_avail, (-1, 1))
+        temp_faculty_avail = np.reshape(self.faculty_avail, (1, -1))
+        self.student_pref = self.student_pref[temp_stud_avail, temp_faculty_avail]        
+        self.faculty_pref = self.faculty_pref[temp_stud_avail, temp_faculty_avail]
         
-
+        # Faculty Time Preferences
+        if self.USE_RECRUITING:
+            self.is_recruiting = self.is_recruiting[self.faculty_avail]
+        if self.USE_WORK_LUNCH:
+            self.will_work_lunch = self.will_work_lunch[self.faculty_avail]
+        
+        # Numbers
+        self.num_students = len(self.student_names)
+        self.all_students = range(self.num_students)
+        self.num_faculty = len(self.faculty_names)
+        self.all_faculty = range(self.num_faculty)
+        
+        
     
     ''' Transform yes/no/maybe into 1/2/3 '''
     def response_to_weight(self, array):
@@ -780,7 +800,6 @@ class match_maker():
 if __name__ == '__main__':
     
     mm = match_maker()
-    mm.load_data()
     mm.main()
 
 
