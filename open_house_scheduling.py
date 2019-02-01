@@ -27,6 +27,10 @@ from __future__ import print_function
         
         
     Future features:   
+        CHANGE SUGGESTIONS TO ONLY BE TOP 2
+        CHANGE COMMENTS TO BENEFIT INSTEAD OF COST
+        IMPLEMENT STATUS PRINTER TO STOP WHEN GOOD SOLUTION IS FOUND
+        IMPLEMENT NOT AVAILABLE SLOTS AS NEGATIVE BENEFIT
         VALIDATE THAT EVERYTHING WORKS USING LAST YEAR'S MATCHES
         ENSURE THAT ALL STUDENTS GET FAIR MATCHES, REGARDLESS OF PLACE ON LIST
         SUGGEST MATCHES FOR FREE SPOTS
@@ -41,6 +45,7 @@ from __future__ import print_function
         CREATE PUBLIC GITHUB
         FIND SOMEWHERE TO HOST BINARIES
         VIDEO TO YOUTUBE
+        ORGANIZE FUNCTIONS
 '''
 
 
@@ -66,7 +71,9 @@ class match_maker():
         self.USE_NUM_INTERVIEWS = True
         self.MIN_INTERVIEWS = 3
         self.MAX_INTERVIEWS = 10
-        #self.NUM_EXTRA_SLOTS = 2
+        
+        self.USE_EXTRA_SLOTS = True
+        self.NUM_EXTRA_SLOTS = 2
         
         self.PATH = "/home/cale/Desktop/open_house/fresh_start"
         self.STUDENT_PREF = "stud_pref_order.csv"
@@ -98,11 +105,13 @@ class match_maker():
         self.FACULTY_SIMILARITY_WEIGHT = 2
         self.NUM_SIMILAR_FACULTY = 5
         
+        self.NUM_SUGGESTIONS = 2
+        
         # Avoid using - it's slow
         # This number should be chosen so that it is larger than lunch penalty
         self.EMPTY_PENALTY = 0  # 500 # This is a positive number, it will be made negative when used # Make zero to not use
         
-        self.DEBUG_PRINT_PREFERENCE = True
+        self.DEBUG_PRINT_PREFERENCE = False
         
         # Calculated parameters
         self.all_interviews = range(self.NUM_INTERVIEWS)
@@ -313,7 +322,7 @@ class match_maker():
         print(names_not_found)
                 
         # Populate the array with Carols names and matches
-        a = 1
+
         
     
     '''
@@ -584,7 +593,9 @@ class match_maker():
         return match_data
         
         
-    ''' Loads the interview times from a csv '''
+    '''
+        Loads the interview times from a csv
+    '''
     def load_interview_times(self):
         
         self.interview_times = []        
@@ -595,19 +606,11 @@ class match_maker():
                 
         
         self.NUM_INTERVIEWS = len(self.interview_times)
-        
-    '''
-        Load matrix data
-        The first 3 rows are ignored
-        The first column is ignore
-    '''
-    #def load_matrix_data(self, filename):
-        
-        
-     #   return matrix_data
-        
+             
 
-    ''' Make the matches '''
+    ''' 
+        Make the matches
+    '''
     def main(self):
         
         # Creates the model.
@@ -712,11 +715,10 @@ class match_maker():
             self.solver = solver
             self.matches = np.sum(self.results, axis=0).astype(bool)
             
-            # Convert the results to text
+            # Convert the results to text and save as text files
             self.matches_as_text()
             
             # Write the results to a file
-            #np.savetxt(path.join(self.PATH, 'results.csv'), results, delimiter=",")
             self.print_numpy_arrays('results.csv', self.results)
             np.savetxt(path.join(self.PATH, 'matches.csv'),
                        self.matches, delimiter=",",
@@ -727,10 +729,199 @@ class match_maker():
         
         else:
             print('-------- Solver failed! --------')
+    
+    '''
+        Check if an integer is odd
+    '''
+    def is_odd(self, num):
+        return num & 0x1
+    
+    
+    '''
+        Print schedules
+        names1 = people who the schedules are for
+        names2 = people on the scheudles
+        data_array:
+                rows = candidates
+                columns = people who the schedules are for
+        person_string = string to be printed on file
+    '''
+    def print_schedules(self, person_string, folder_name, names1, schedule, good_matches):
+        
+        # Get the interview times
+        times = np.asarray(self.interview_times)
+        times.flatten()
+        schedule = np.asarray(schedule)
+        
+        # Make the folder, if it doesn't exist
+        if not path.exists(path.join(self.PATH, folder_name)):
+            makedirs(path.join(self.PATH, folder_name))
+            
+        # Print the results
+#        num_schedules = len(names1)
+        for count, name in enumerate(names1):
+            
+            # Determine the file name
+            file_name = name + '.txt'
+            file_name = path.join(self.PATH, folder_name, file_name)
+            
+            # Open the file for editing
+            with open(file_name, 'w') as file:
+                
+                # Header
+                file.writelines(person_string + ' interivew schedule for:         ' + name + '\n')
+                file.writelines('\n')
+                file.writelines('\n')
+                
+                # Schedule
+                if self.DEBUG_PRINT_PREFERENCE:
+                    file.writelines('Time:                     Person:                 Preference:\n')
+                    for i in self.all_interviews:
+                        
+                        if self.is_odd(i):
+                            sep_string = ' +++++++++ '
+                        else:
+                            sep_string = ' --------- '
+                            
+                        file.writelines(np.array_str(times[i]) + sep_string
+                                       + schedule[count, i] + sep_string
+                                       + '\n')
+                else:
+                    file.writelines('Time:                     Person:\n')
+                    for i in self.all_interviews:
+                        
+                        if self.is_odd(i):
+                            sep_string = ' +++++++++ '
+                        else:
+                            sep_string = ' --------- '
+                            
+                        file.writelines(np.array_str(times[i]) + sep_string
+                                       + schedule[count, i]
+                                       + '\n')
+            
+                # Suggested matches
+                file.writelines('\n')
+                file.writelines('\n')
+                file.writelines('During the open interview periods, we suggest you meet with: \n')
+                
+                for match_count, match in enumerate(good_matches[count]):
+                    if match_count == 0:
+                        file.writelines(match)
+                    else:
+                        file.writelines(', ' + match)
+    '''
+        Find good matches that were not made
+    '''
+    def find_suggested_matches(self):
+        
+        # Initialize lists
+        self.stud_suggest_matches = [None] * self.num_students
+        self.faculty_suggest_matches = [None] * self.num_faculty
+        
+        # Determine benefit for matches not made
+        matches = np.logical_not(self.matches)
+        if self.LUNCH_PERIOD != 0:
+            period = 0
+        elif self.NUM_INTERVIEWS > 0:
+            period = 1
+        
+        match_benefit = matches * self.cost_matrix[period]
+        
+        # Find good matches for faculty
+        for p in self.all_faculty:
+            
+            # Find unique benefit levels
+            unique_benefits, unique_counts = np.unique(match_benefit[:, p], return_counts=True)
+            unique_counts = np.flipud(unique_counts)
+            unique_benefits = np.flipud(unique_benefits)
+            
+            # Don't make 0-benefit suggestions
+            unique_counts = unique_counts[unique_benefits > 0]
+            unique_benefits = unique_benefits[unique_benefits > 0]
+            
+            # Determine how many benefit levels are needed to reach number of
+            # suggestions needed
+            summed_counts = np.cumsum(unique_counts)
+            bin_needed = np.where(summed_counts > self.NUM_SUGGESTIONS)
+            if np.shape(bin_needed)[0] == 0:
+                bin_needed = np.shape(summed_counts)[0] - 1
+            else:
+                bin_needed = bin_needed[0][0]
+            
+            
+            if np.shape(unique_benefits)[0] > 0:
+                
+                # Use all of the matches from the first few bins
+                if bin_needed > 0:
+                    good_matches = np.where(match_benefit[:, p] >= unique_benefits[bin_needed - 1])[0]
+                    num_matches_made = np.shape(good_matches)[0]
+                else:
+                    good_matches = np.empty(0)
+                    num_matches_made = 0
+                
+                # Take random matches from the last bin (because all have equal weight)
+                possible_matches = np.where(match_benefit[:, p] == unique_benefits[bin_needed])[0]
+                num_matches_needed = self.NUM_SUGGESTIONS - num_matches_made
+                
+                if num_matches_needed <= summed_counts[-1]:
+                    rand_matches = np.random.choice(possible_matches, size=num_matches_needed)
+                    matches = np.concatenate((good_matches, rand_matches)).astype(int)
+                else:
+                    matches = np.where(match_benefit[:, p])              
+                
+                
+            else:
+                matches = []
+            '''
+            
+            
+            
+            
+            
+            is_greater_than_zero = match_benefit[:, p] > 0
+            
+            num_matches = 0
+            num_unique = 0
+            while (num_matches < self.NUM_SUGGESTIONS
+                   and num_unique < np.shape(unique_benefits)[0]
+                   and unique_benefits[num_unique] > 0):
+                new_
+                
+                
+                
+                
+            if np.shape(unique_benefits)[0] >= self.NUM_SUGGESTIONS:
+                is_ranked_highly = match_benefit[:, p] >= unique_benefits[self.NUM_SUGGESTIONS - 1]
+                
+                good_matches = np.where(np.logical_and(is_ranked_highly, is_greater_than_zero))
+            else:
+                good_matches = np.where(match_benefit[:, p])
+            
+            matches = self.student_names[good_matches]
+            self.faculty_suggest_matches[p] = matches
+            '''
+        # Find good matches for students
+        for s in self.all_students:
+            unique_benefits = np.flipud(np.unique(match_benefit[s, :]))
+            if np.shape(unique_benefits)[0] >= self.NUM_SUGGESTIONS:
+                is_greater_than_zero = match_benefit[s, :] > 0
+                is_ranked_highly = match_benefit[s, :] >= unique_benefits[self.NUM_SUGGESTIONS - 1]
+                good_matches = np.where(np.logical_and(is_ranked_highly, is_greater_than_zero))
+            else:
+                good_matches = np.where(match_benefit[s, :])
+            
+            matches = self.faculty_names[good_matches]
+            self.stud_suggest_matches[s] = matches
         
         
-    ''' Convert the boolean matrix to a string matrix '''
+    
+    '''
+        Convert the boolean matrix to a string matrix
+    '''
     def matches_as_text(self):
+        
+        # Find good matches that were not made
+        self.find_suggested_matches()
         
         # Interview - Faculty Schedule     
         self.faculty_schedule = []        
@@ -748,43 +939,10 @@ class match_maker():
                     temp_list.append('Free')               
             self.faculty_schedule.append(temp_list)
         
-        times = np.asarray(self.interview_times)
-        times.flatten()
-        header_size = 3
+        self.print_schedules('Faculty', 'faculty_schedules',
+                             self.faculty_names, self.faculty_schedule,
+                             self.faculty_suggest_matches)
         
-        if not path.exists(path.join(self.PATH, 'faculty_schedules')):
-            makedirs(path.join(self.PATH, 'faculty_schedules'))
-        
-        for p in self.all_faculty:
-            faculty_name = self.faculty_names[p] + '.txt'
-            filename = path.join(self.PATH,
-                                 'faculty_schedules',
-                                 faculty_name)
-            faculty_schedule = np.asarray(self.faculty_schedule[p])
-            faculty_schedule = np.reshape(faculty_schedule, (-1, 1))
-            schedule = np.concatenate((times, faculty_schedule), axis=1)
-            
-            header = np.empty((header_size, 2), dtype=object)
-            header[0, 0] = "Faculty"
-            header[0, 1] = self.faculty_names[p]
-            header[1, 0] = ''
-            header[1, 1] = ''
-            header[2, 0] = '   Time    '
-            header[2, 1] = 'Student:'
-
-            
-            schedule = np.concatenate((header, schedule), axis=0)
-            
-            if self.DEBUG_PRINT_PREFERENCE:
-                preferences = np.empty((1, header_size + self.NUM_INTERVIEWS), dtype=int)
-                int_num, stud_num = np.where(self.results[:, :, p])
-                preferences[0, header_size + int_num] = self.faculty_pref[stud_num, p]
-                schedule = np.concatenate((schedule, np.transpose(preferences)), axis=1)
-                
-            np.savetxt(filename, schedule,
-                       delimiter=":   ", fmt='%s')
-            
-            
         # Interview - Student Schedule     
         self.student_schedule = []        
         for s in self.all_students:                
@@ -801,57 +959,26 @@ class match_maker():
                     temp_list.append('Free')               
             self.student_schedule.append(temp_list)
             
-        if not path.exists(path.join(self.PATH, 'student_schedules')):
-            makedirs(path.join(self.PATH, 'student_schedules'))
-        
-        for s in self.all_students:
-            student_name = self.student_names[s] + '.txt'
-            filename = path.join(self.PATH,
-                                 'student_schedules',
-                                 student_name)
-            
-            student_schedule = np.asarray(self.student_schedule[p])
-            student_schedule = np.reshape(student_schedule, (-1, 1))            
-            schedule = np.concatenate((times, student_schedule), axis=1)
-            
-            header = np.empty((header_size, 2), dtype=object)
-            header[0, 0] = "Student"
-            header[0, 1] = self.student_names[s]
-            header[1, 0] = ''
-            header[1, 1] = ''
-            header[2, 0] = '   Time    '
-            header[2, 1] = 'Faculty:'
-            
-            schedule = np.concatenate((header, schedule), axis=0)            
-            
-            if self.DEBUG_PRINT_PREFERENCE:
-                preferences = np.empty((1, header_size + self.NUM_INTERVIEWS), dtype=int)
-                int_num, fac_num = np.where(self.results[:, s, :])
-                preferences[0, header_size + int_num] = self.student_pref[s, fac_num]
-                schedule = np.concatenate((schedule, np.transpose(preferences)), axis=1)
-            
-            np.savetxt(filename, schedule,
-                       delimiter=":   ", fmt='%s')
+        self.print_schedules('Student', 'student_schedules',
+                             self.student_names, self.student_schedule,
+                             self.stud_suggest_matches)
+       
         
         # Matches
         self.matches_text = []        
         for p in self.all_faculty:
             student_names = np.asarray(self.student_names)
-            #matched_student_index = np.where(self.matches[p] == True)[0]
-            #temp_list = student_names[student_num] for student_num in matched_student_index
             temp_list = student_names[self.matches[:, p]]
             self.matches_text.append(temp_list.tolist())
             
         
         faculty_names = np.asarray(self.faculty_names)
-        #faculty_names = np.reshape(faculty_names, (1))
         matches = np.asarray(self.matches_text)
         matches_2_print = []
         for p in self.all_faculty:
             text = [faculty_names[p]]
             text.append(matches[p])
             matches_2_print.append(text)
-       # matches = np.concatenate((faculty_names, matches))
 
             
         filename = path.join(self.PATH,
@@ -860,7 +987,9 @@ class match_maker():
                    delimiter="", fmt='%15s')        
         
         
-    ''' Print a numpy array as a csv file'''
+    '''
+        Print a numpy array as a csv file
+    '''
     def print_numpy_arrays(self, file_name, array):
         with open(path.join(self.PATH, file_name), 'w') as csvfile:
             writer = csv.writer(csvfile, delimiter=',')
@@ -903,7 +1032,9 @@ class match_maker():
         
         
     
-    ''' Transform yes/no/maybe into 1/2/3 '''
+    '''
+        Transform yes/no/maybe into 2/0/1
+    '''
     def response_to_weight(self, array):
         array = array.flatten()
         
