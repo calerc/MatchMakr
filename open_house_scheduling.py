@@ -58,6 +58,57 @@ import warnings
 from ortools.sat import sat_parameters_pb2
 
 
+class VarArrayAndObjectiveSolutionPrinter(cp_model.CpSolverSolutionCallback):
+    """Print intermediate solutions."""
+
+    def __init__(self, variables, student_pref, faculty_pref, num_faculty, num_students, num_interviews):
+        cp_model.CpSolverSolutionCallback.__init__(self)
+        self.variables = variables.values()
+        self.__solution_count = 0
+#        self.cost_matrix = cost_matrix
+        self.student_pref = student_pref
+        self.faculty_pref = faculty_pref
+        self.num_faculty = num_faculty
+        self.num_students = num_students
+        self.num_interviews = num_interviews
+
+    def on_solution_callback(self):
+        
+        # Get sizes
+#        num_faculty = self.num_faculty
+#        num_students = self.num_students
+#        num_interviews = self.num_interviews
+        
+        # Print objective value
+        print('Solution %i' % self.__solution_count)
+        print('  objective value = %i' % self.ObjectiveValue())
+        
+        values = []
+        for v in self.variables:
+            values.append(self.Value(v))
+        
+        values = np.asarray(values)
+        values = np.reshape(values, (self.num_faculty, self.num_students, self.num_interviews))
+        
+        # Print number of matches made
+        
+        
+        
+        self.__solution_count += 1
+
+    def calc_cost(self):
+        pass
+        
+        
+
+
+        
+
+    def solution_count(self):
+        return self.__solution_count
+
+
+
 class match_maker():
        
     
@@ -106,6 +157,8 @@ class match_maker():
         self.NUM_SIMILAR_FACULTY = 5
         
         self.NUM_SUGGESTIONS = 2
+        
+        self.MAX_SOLVER_TIME_SECONDS = 60
         
         # Avoid using - it's slow
         # This number should be chosen so that it is larger than lunch penalty
@@ -628,7 +681,7 @@ class match_maker():
             for s in self.all_students:
                 for i in self.all_interviews:
                     self.interview[(p, s,
-                            i)] = model.NewBoolVar('interview_n%id%is%i' % (p, s, i))
+                            i)] = model.NewBoolVar('interview_p%i_s%i_i%i' % (p, s, i))
     
         # Each student has no more than one interview at a time
         for p in self.all_faculty:
@@ -690,12 +743,19 @@ class match_maker():
         # Creates the solver and solve.
         print('Building Model...', flush=True)
         solver = cp_model.CpSolver()
+        solution_printer = VarArrayAndObjectiveSolutionPrinter(self.interview,
+                                                               self.student_pref,
+                                                               self.faculty_pref,
+                                                               self.num_faculty,
+                                                               self.num_students,
+                                                               self.NUM_INTERVIEWS)
         
         print('Setting up workers...', flush=True)
         solver.parameters = sat_parameters_pb2.SatParameters(num_search_workers=8)
+        solver.parameters.max_time_in_seconds = self.MAX_SOLVER_TIME_SECONDS
         
         print('Solving model...', flush=True)
-        status = solver.Solve(model)   
+        status = solver.SolveWithSolutionCallback(model, solution_printer)   
         
         print(solver.StatusName(status))
  
