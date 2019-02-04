@@ -24,10 +24,10 @@ from __future__ import print_function
         Accepts "not available" slots (BUT THIS IS BUGGY)
         Accepts a vector to match people based on their track
         Accepts an interviewer similarity score
+        Provides suggestions for interview spots
         
         
     Future features:   
-        CHANGE SUGGESTIONS TO ONLY BE TOP 2
         CHANGE COMMENTS TO BENEFIT INSTEAD OF COST
         IMPLEMENT STATUS PRINTER TO STOP WHEN GOOD SOLUTION IS FOUND
         IMPLEMENT NOT AVAILABLE SLOTS AS NEGATIVE BENEFIT
@@ -809,6 +809,12 @@ class match_maker():
                         file.writelines(match)
                     else:
                         file.writelines(', ' + match)
+                        
+                file.writelines('\n')
+                file.writelines('\n')
+                
+                
+                
     '''
         Find good matches that were not made
     '''
@@ -872,36 +878,58 @@ class match_maker():
                 
             else:
                 matches = []
-            '''
             
+            self.faculty_suggest_matches[p] = self.student_names[matches]
             
-            
-            
-            
-            is_greater_than_zero = match_benefit[:, p] > 0
-            
-            num_matches = 0
-            num_unique = 0
-            while (num_matches < self.NUM_SUGGESTIONS
-                   and num_unique < np.shape(unique_benefits)[0]
-                   and unique_benefits[num_unique] > 0):
-                new_
-                
-                
-                
-                
-            if np.shape(unique_benefits)[0] >= self.NUM_SUGGESTIONS:
-                is_ranked_highly = match_benefit[:, p] >= unique_benefits[self.NUM_SUGGESTIONS - 1]
-                
-                good_matches = np.where(np.logical_and(is_ranked_highly, is_greater_than_zero))
-            else:
-                good_matches = np.where(match_benefit[:, p])
-            
-            matches = self.student_names[good_matches]
-            self.faculty_suggest_matches[p] = matches
-            '''
         # Find good matches for students
         for s in self.all_students:
+            
+            # Find unique benefit levels
+            unique_benefits, unique_counts = np.unique(match_benefit[s, :], return_counts=True)
+            unique_counts = np.flipud(unique_counts)
+            unique_benefits = np.flipud(unique_benefits)
+            
+            # Don't make 0-benefit suggestions
+            unique_counts = unique_counts[unique_benefits > 0]
+            unique_benefits = unique_benefits[unique_benefits > 0]
+            
+            # Determine how many benefit levels are needed to reach number of
+            # suggestions needed
+            summed_counts = np.cumsum(unique_counts)
+            bin_needed = np.where(summed_counts > self.NUM_SUGGESTIONS)
+            if np.shape(bin_needed)[0] == 0:
+                bin_needed = np.shape(summed_counts)[0] - 1
+            else:
+                bin_needed = bin_needed[0][0]
+            
+            
+            if np.shape(unique_benefits)[0] > 0:
+                
+                # Use all of the matches from the first few bins
+                if bin_needed > 0:
+                    good_matches = np.where(match_benefit[s, :] >= unique_benefits[bin_needed - 1])[0]
+                    num_matches_made = np.shape(good_matches)[0]
+                else:
+                    good_matches = np.empty(0)
+                    num_matches_made = 0
+                
+                # Take random matches from the last bin (because all have equal weight)
+                possible_matches = np.where(match_benefit[s, :] == unique_benefits[bin_needed])[0]
+                num_matches_needed = self.NUM_SUGGESTIONS - num_matches_made
+                
+                if num_matches_needed <= summed_counts[-1]:
+                    rand_matches = np.random.choice(possible_matches, size=num_matches_needed)
+                    matches = np.concatenate((good_matches, rand_matches)).astype(int)
+                else:
+                    matches = np.where(match_benefit[:, p])              
+                
+                
+            else:
+                matches = []
+            
+            self.stud_suggest_matches[s] = self.faculty_names[matches]
+            
+            '''
             unique_benefits = np.flipud(np.unique(match_benefit[s, :]))
             if np.shape(unique_benefits)[0] >= self.NUM_SUGGESTIONS:
                 is_greater_than_zero = match_benefit[s, :] > 0
@@ -912,6 +940,7 @@ class match_maker():
             
             matches = self.faculty_names[good_matches]
             self.stud_suggest_matches[s] = matches
+            '''
         
         
     
