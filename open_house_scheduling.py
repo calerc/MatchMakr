@@ -33,7 +33,6 @@ from __future__ import print_function
         Code clarity:
             ORGANIZE FUNCTIONS
             BRING UP TO PYTHON STANDARDS
-            COLLECT ALL CONSTANTS INTO ONE FUNCTION
             
         Code function:
             VALIDATE THAT EVERYTHING WORKS USING LAST YEAR'S MATCHES
@@ -434,69 +433,6 @@ class match_maker():
         self.calc_objective_matrix()
 
                 
-    ''' Old load function.  Here for documentation '''
-    def load_data_defunct(self):
-    
-        # Constants
-        
-        PATH = self.PATH
-        STUDENT_PREF = self.STUDENT_PREF
-        FACULTY_PREF = self.FACULTY_PREF
-
-        # Read the data from the CSV
-        student_pref = []
-        faculty_pref = []
-        
-        with open(path.join(PATH, STUDENT_PREF), 'r') as csvfile:
-            reader = csv.reader(csvfile, delimiter=',')
-            for row in reader:
-                student_pref.append(row)
-                
-        with open(path.join(PATH, FACULTY_PREF), 'r') as csvfile:
-            reader = csv.reader(csvfile, delimiter=',')
-            for row in reader:
-                faculty_pref.append(row)
-        
-        # Seperate the data and the names
-        faculty_names = faculty_pref[0][1:]
-        
-        student_names = []
-        student_data = []
-        faculty_data = []
-        for student in faculty_pref[1:]:
-            student_names.append(student[0])
-            faculty_data.append(student[1:])  
-        
-        for student in student_pref[1:]:
-            student_data.append(student[1:])
-        
-        student_pref = np.asarray(student_data, dtype=np.float) + 1
-        faculty_pref = np.asarray(faculty_data, dtype=np.float) + 1
-        
-        
-        # Collect loaded data
-        self.student_pref = student_pref
-        self.faculty_pref = faculty_pref
-        self.faculty_names = faculty_names
-        self.student_names = student_names
-        
-        
-        # Get necessary statistics about the data
-        self.num_students = len(self.student_names)
-        self.num_faculty = len(self.faculty_names)
-        
-        self.all_students = range(self.num_students)
-        self.all_faculty = range(self.num_faculty)
-
-        # Remove whitespace from names
-        for p in self.all_faculty:
-            self.faculty_names[p] = self.faculty_names[p].replace("'", "")
-            self.faculty_names[p] = self.faculty_names[p].replace(" ", "")
-            
-        for s in self.all_students:            
-            self.student_names[s] = self.student_names[s].replace("'", "")
-            self.student_names[s] = self.student_names[s].replace(" " , "")
-
     
     '''
         Load the preference data
