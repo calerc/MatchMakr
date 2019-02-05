@@ -1063,48 +1063,6 @@ class match_maker():
                 out_array[count] = 1
                 
         return out_array
-    
-    
-    
-    
-    
-class match_checker():
-    
-    def __init__(self, student_pref, faculty_pref):
-        self.student_pref = student_pref
-        self.faculty_pref = faculty_pref
-        
-    def check_matches(self, matches):
-        
-        NUM_PREFERENCES_2_CHECK = 3
-        
-        # Students
-        student_pref = self.student_pref * matches
-        self.student_pref_objective = np.sum(student_pref, axis=1)
-        total_preferences = np.empty((NUM_PREFERENCES_2_CHECK))
-        preferences_met = np.empty((NUM_PREFERENCES_2_CHECK))
-        for pref_num in range(NUM_PREFERENCES_2_CHECK):
-            total_preferences[pref_num] = np.sum(self.student_pref == (10 - pref_num))
-            preferences_met[pref_num] = np.sum(student_pref == (10 - pref_num))
-        
-        self.student_fraction_preferences_met = preferences_met / total_preferences
-        print('Fraction of student preferences met: ')
-        print(self.student_fraction_preferences_met)
-        
-        # Faculty
-        faculty_pref = self.faculty_pref * matches
-        self.faculty_pref_objective = np.sum(faculty_pref, axis=0)
-        total_preferences = np.empty((NUM_PREFERENCES_2_CHECK))
-        preferences_met = np.empty((NUM_PREFERENCES_2_CHECK))
-        for pref_num in range(NUM_PREFERENCES_2_CHECK):
-            total_preferences[pref_num] = np.sum(self.faculty_pref == (10 - pref_num))
-            preferences_met[pref_num] = np.sum(faculty_pref == (10 - pref_num))
-        
-        self.faculty_fraction_preferences_met = preferences_met / total_preferences
-        print('Fraction of faculty preferences met: ')
-        print(self.faculty_fraction_preferences_met)
-        
-        return self.faculty_fraction_preferences_met, self.student_fraction_preferences_met
          
 
 class VarArrayAndObjectiveSolutionPrinter(cp_model.CpSolverSolutionCallback):
@@ -1122,7 +1080,6 @@ class VarArrayAndObjectiveSolutionPrinter(cp_model.CpSolverSolutionCallback):
         self.STOP_ON_NO_CHANGE = True
         
         if self.CHECK_MATCHES:
-            self.match_checker = match_checker(match_maker.student_pref, match_maker.faculty_pref)
             self.last_stud_percent = np.zeros((1, self.match_maker.NUM_PREFERENCES_2_CHECK))
             self.last_faculty_percent = np.zeros((1, self.match_maker.NUM_PREFERENCES_2_CHECK))
             
@@ -1157,7 +1114,7 @@ class VarArrayAndObjectiveSolutionPrinter(cp_model.CpSolverSolutionCallback):
             
             # Determine number of matches made for preferences
             matches = np.sum(values, axis=2)
-            self.match_checker.check_matches(matches)
+            self.match_maker.check_preferences(matches)
         
         self.__solution_count += 1
 
