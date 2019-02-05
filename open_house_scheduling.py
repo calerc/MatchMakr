@@ -267,6 +267,126 @@ class match_maker():
         # Faculty
         return(prof_pref_4_students, stud_pref_4_profs, objective_matrix)
         
+        
+    '''
+        Find good matches that were not made
+    '''
+    def find_suggested_matches(self):
+        
+        # Initialize lists
+        self.stud_suggest_matches = [None] * self.num_students
+        self.faculty_suggest_matches = [None] * self.num_faculty
+        
+        # Determine benefit for matches not made
+        matches = np.logical_not(self.matches)
+        if self.LUNCH_PERIOD != 0:
+            period = 0
+        elif self.NUM_INTERVIEWS > 0:
+            period = 1
+        
+        match_benefit = matches * self.objective_matrix[period]
+        
+        # Find good matches for faculty
+        for p in self.all_faculty:
+            
+            # Find unique benefit levels
+            unique_benefits, unique_counts = np.unique(match_benefit[:, p], return_counts=True)
+            unique_counts = np.flipud(unique_counts)
+            unique_benefits = np.flipud(unique_benefits)
+            
+            # Don't make 0-benefit suggestions
+            unique_counts = unique_counts[unique_benefits > 0]
+            unique_benefits = unique_benefits[unique_benefits > 0]
+            
+            if np.shape(unique_benefits)[0] > 0:
+                
+                # Determine how many benefit levels are needed to reach number of
+                # suggestions needed
+                summed_counts = np.cumsum(unique_counts)
+                bin_needed = np.where(summed_counts > self.NUM_SUGGESTIONS)
+                if np.shape(bin_needed)[0] == 0:
+                    bin_needed = np.shape(summed_counts)[0] - 1
+                else:
+                    bin_needed = bin_needed[0][0]
+                
+                # Use all of the matches from the first few bins
+                if bin_needed > 0:
+                    good_matches = np.where(match_benefit[:, p] >= unique_benefits[bin_needed - 1])[0]
+                    num_matches_made = np.shape(good_matches)[0]
+                else:
+                    good_matches = np.empty(0)
+                    num_matches_made = 0
+                
+                # Take random matches from the last bin (because all have equal weight)
+                possible_matches = np.where(match_benefit[:, p] == unique_benefits[bin_needed])[0]
+                num_matches_needed = self.NUM_SUGGESTIONS - num_matches_made
+                
+                if num_matches_needed <= summed_counts[-1]:
+                    rand_matches = np.random.choice(possible_matches, size=num_matches_needed)
+                    matches = np.concatenate((good_matches, rand_matches)).astype(int)
+                else:
+                    matches = np.where(match_benefit[:, p])              
+                
+                
+            else:
+                matches = []
+            
+            self.faculty_suggest_matches[p] = self.student_names[matches]
+            
+        # Find good matches for students
+        for s in self.all_students:
+            
+            # Find unique benefit levels
+            unique_benefits, unique_counts = np.unique(match_benefit[s, :], return_counts=True)
+            unique_counts = np.flipud(unique_counts)
+            unique_benefits = np.flipud(unique_benefits)
+            
+            # Don't make 0-benefit suggestions
+            unique_counts = unique_counts[unique_benefits > 0]
+            unique_benefits = unique_benefits[unique_benefits > 0]
+            
+            if np.shape(unique_benefits)[0] > 0:
+                
+                # Determine how many benefit levels are needed to reach number of
+                # suggestions needed
+                summed_counts = np.cumsum(unique_counts)
+                bin_needed = np.where(summed_counts > self.NUM_SUGGESTIONS)
+                if np.shape(bin_needed)[0] == 0:
+                    bin_needed = np.shape(summed_counts)[0] - 1
+                else:
+                    bin_needed = bin_needed[0][0]                
+                
+                # Use all of the matches from the first few bins
+                if bin_needed > 0:
+                    good_matches = np.where(match_benefit[s, :] >= unique_benefits[bin_needed - 1])[0]
+                    num_matches_made = np.shape(good_matches)[0]
+                else:
+                    good_matches = np.empty(0)
+                    num_matches_made = 0
+                
+                # Take random matches from the last bin (because all have equal weight)
+                possible_matches = np.where(match_benefit[s, :] == unique_benefits[bin_needed])[0]
+                num_matches_needed = self.NUM_SUGGESTIONS - num_matches_made
+                
+                if num_matches_needed <= summed_counts[-1]:
+                    rand_matches = np.random.choice(possible_matches, size=num_matches_needed)
+                    matches = np.concatenate((good_matches, rand_matches)).astype(int)
+                else:
+                    matches = np.where(match_benefit[:, p])              
+                
+                
+            else:
+                matches = []
+            
+            self.stud_suggest_matches[s] = self.faculty_names[matches]        
+
+    
+    '''
+        Check if an integer is odd
+    '''
+    def is_odd(self, num):
+        return num & 0x1        
+        
 
     ''' Determine how many cpus to use '''
     def get_cpu_2_use(self):
@@ -338,41 +458,7 @@ class match_maker():
         return availability, available
         
     
-    '''
-        Load track data
-    '''
-    def load_track_data(self):
-        
-        # Get the track data from files
-        self.faculty_tracks = self.load_data_from_human_readable(self.FACULTY_TRACK_FILE_NAME)
-        self.student_tracks = self.load_data_from_human_readable(self.STUDENT_TRACK_FILE_NAME)
-        
-        # Find students and faculty that are in the same track
-        all_tracks = np.concatenate((self.faculty_tracks, self.student_tracks), axis=1)
-        unique_tracks, unique_idx = np.unique(all_tracks, return_inverse=True)
-        
-        self.same_track = np.zeros((self.num_students, self.num_faculty))
-        for count, track in enumerate(unique_tracks):
-            if track != 'None' and track != '':
-                same_track = np.asarray(np.where(unique_idx == count))
-                faculty_nums = np.reshape(same_track[same_track < self.num_faculty], (1, -1))
-                student_nums = np.reshape(same_track[same_track >= self.num_faculty] - self.num_faculty, (-1, 1))
-                
-                self.same_track[student_nums, faculty_nums] = 1
-    
-    '''
-        Load matrix data
-    '''
-    def load_matrix_data(self, filename):
-        matrix_data = []
-        
-        with open(path.join(self.PATH, filename), 'r') as csvfile:
-            reader = csv.reader(csvfile, delimiter=',')
-            for row in reader:
-                matrix_data.append(row)
-        
-        return(matrix_data)
-    
+
     
     '''
         Load faculty similarity matrix
@@ -389,9 +475,26 @@ class match_maker():
         num_rows, num_columns = np.shape(self.faculty_similarity)
         if num_rows != self.num_faculty or num_columns != self.num_faculty:
             raise ValueError('Faculty similarity size does not match the number of faculty')
+            
+            
+    '''
+        Loads the interview times from a csv
+    '''
+    def load_interview_times(self):
+        
+        self.interview_times = []        
+        with open(path.join(self.PATH, self.TIMES_NAME), 'r') as csvfile:
+            reader = csv.reader(csvfile, delimiter=',')
+            for row in reader:
+                self.interview_times.append(row)
+                
+        
+        self.NUM_INTERVIEWS = len(self.interview_times)
         
  
-    ''' Load the data '''
+    '''
+        Load the data
+    '''
     def load_data(self):      
         
         # Load the interview times
@@ -431,6 +534,47 @@ class match_maker():
         
         # Calculate the objective matrix
         self.calc_objective_matrix()
+        
+        
+    ''' 
+        Read requests from human-readable format 
+        Rows:
+            The first row of the file will be a header
+            The second row of the file will be the faculty names
+            The third row will be blank
+            The next rows will contain the names of students
+        Columns:
+            The first column will be a header
+            The next columns will contain data
+        
+    '''
+    def load_data_from_human_readable(self, filename, append_name=True):
+        
+        # Load the data
+        match_data = []
+        with open(path.join(self.PATH, filename), 'r') as csvfile:
+            reader = csv.reader(csvfile, delimiter=',')
+            for row in reader:
+                match_data.append(row)
+                
+        match_data = np.asarray(match_data)        
+        match_data = match_data[3:, 1:]
+
+        return match_data
+    
+        
+    '''
+        Load matrix data
+    '''
+    def load_matrix_data(self, filename):
+        matrix_data = []
+        
+        with open(path.join(self.PATH, filename), 'r') as csvfile:
+            reader = csv.reader(csvfile, delimiter=',')
+            for row in reader:
+                matrix_data.append(row)
+        
+        return(matrix_data)
 
                 
     
@@ -510,50 +654,31 @@ class match_maker():
         self.student_names = student_names
         self.faculty_names = faculty_names
 
-
+    '''
+        Load track data
+        A "track" is a field of specialty.  The idea is to match students and
+        faculty who have the same specialty.
+    '''
+    def load_track_data(self):
+        
+        # Get the track data from files
+        self.faculty_tracks = self.load_data_from_human_readable(self.FACULTY_TRACK_FILE_NAME)
+        self.student_tracks = self.load_data_from_human_readable(self.STUDENT_TRACK_FILE_NAME)
+        
+        # Find students and faculty that are in the same track
+        all_tracks = np.concatenate((self.faculty_tracks, self.student_tracks), axis=1)
+        unique_tracks, unique_idx = np.unique(all_tracks, return_inverse=True)
+        
+        self.same_track = np.zeros((self.num_students, self.num_faculty))
+        for count, track in enumerate(unique_tracks):
+            if track != 'None' and track != '':
+                same_track = np.asarray(np.where(unique_idx == count))
+                faculty_nums = np.reshape(same_track[same_track < self.num_faculty], (1, -1))
+                student_nums = np.reshape(same_track[same_track >= self.num_faculty] - self.num_faculty, (-1, 1))
+                
+                self.same_track[student_nums, faculty_nums] = 1
     
-    ''' 
-        Read requests from human-readable format 
-        Rows:
-            The first row of the file will be a header
-            The second row of the file will be the faculty names
-            The third row will be blank
-            The next rows will contain the names of students
-        Columns:
-            The first column will be a header
-            The next columns will contain data
-        
-    '''
-    def load_data_from_human_readable(self, filename, append_name=True):
-        
-        # Load the data
-        match_data = []
-        with open(path.join(self.PATH, filename), 'r') as csvfile:
-            reader = csv.reader(csvfile, delimiter=',')
-            for row in reader:
-                match_data.append(row)
-                
-        match_data = np.asarray(match_data)        
-        match_data = match_data[3:, 1:]
-
-        return match_data
-        
-        
-    '''
-        Loads the interview times from a csv
-    '''
-    def load_interview_times(self):
-        
-        self.interview_times = []        
-        with open(path.join(self.PATH, self.TIMES_NAME), 'r') as csvfile:
-            reader = csv.reader(csvfile, delimiter=',')
-            for row in reader:
-                self.interview_times.append(row)
-                
-        
-        self.NUM_INTERVIEWS = len(self.interview_times)
-             
-
+    
     ''' 
         Make the matches
     '''
@@ -669,203 +794,7 @@ class match_maker():
         
         else:
             print('-------- Solver failed! --------')
-    
-    '''
-        Check if an integer is odd
-    '''
-    def is_odd(self, num):
-        return num & 0x1
-    
-    
-    '''
-        Print schedules
-        names1 = people who the schedules are for
-        names2 = people on the scheudles
-        data_array:
-                rows = candidates
-                columns = people who the schedules are for
-        person_string = string to be printed on file
-    '''
-    def print_schedules(self, person_string, folder_name, names1, schedule, good_matches):
-        
-        # Get the interview times
-        times = np.asarray(self.interview_times)
-        times.flatten()
-        schedule = np.asarray(schedule)
-        
-        # Make the folder, if it doesn't exist
-        if not path.exists(path.join(self.PATH, folder_name)):
-            makedirs(path.join(self.PATH, folder_name))
-            
-        # Print the results
-        for count, name in enumerate(names1):
-            
-            # Determine the file name
-            file_name = name + '.txt'
-            file_name = path.join(self.PATH, folder_name, file_name)
-            
-            # Open the file for editing
-            with open(file_name, 'w') as file:
-                
-                # Header
-                file.writelines(person_string + ' interivew schedule for:         ' + name + '\n')
-                file.writelines('\n')
-                file.writelines('\n')
-                
-                # Schedule
-                if self.DEBUG_PRINT_PREFERENCE:
-                    file.writelines('Time:                     Person:                 Preference:\n')
-                    for i in self.all_interviews:
-                        
-                        if self.is_odd(i):
-                            sep_string = ' +++++++++ '
-                        else:
-                            sep_string = ' --------- '
-                            
-                        file.writelines(np.array_str(times[i]) + sep_string
-                                       + schedule[count, i] + sep_string
-                                       + '\n')
-                else:
-                    file.writelines('Time:                     Person:\n')
-                    for i in self.all_interviews:
-                        
-                        if self.is_odd(i):
-                            sep_string = ' +++++++++ '
-                        else:
-                            sep_string = ' --------- '
-                            
-                        file.writelines(np.array_str(times[i]) + sep_string
-                                       + schedule[count, i]
-                                       + '\n')
-            
-                # Suggested matches
-                file.writelines('\n')
-                file.writelines('\n')
-                file.writelines('During the open interview periods, we suggest you meet with: \n')
-                
-                for match_count, match in enumerate(good_matches[count]):
-                    if match_count == 0:
-                        file.writelines(match)
-                    else:
-                        file.writelines(', ' + match)
-                        
-                file.writelines('\n')
-                file.writelines('\n')
-                
-                
-                
-    '''
-        Find good matches that were not made
-    '''
-    def find_suggested_matches(self):
-        
-        # Initialize lists
-        self.stud_suggest_matches = [None] * self.num_students
-        self.faculty_suggest_matches = [None] * self.num_faculty
-        
-        # Determine benefit for matches not made
-        matches = np.logical_not(self.matches)
-        if self.LUNCH_PERIOD != 0:
-            period = 0
-        elif self.NUM_INTERVIEWS > 0:
-            period = 1
-        
-        match_benefit = matches * self.objective_matrix[period]
-        
-        # Find good matches for faculty
-        for p in self.all_faculty:
-            
-            # Find unique benefit levels
-            unique_benefits, unique_counts = np.unique(match_benefit[:, p], return_counts=True)
-            unique_counts = np.flipud(unique_counts)
-            unique_benefits = np.flipud(unique_benefits)
-            
-            # Don't make 0-benefit suggestions
-            unique_counts = unique_counts[unique_benefits > 0]
-            unique_benefits = unique_benefits[unique_benefits > 0]
-            
-            if np.shape(unique_benefits)[0] > 0:
-                
-                # Determine how many benefit levels are needed to reach number of
-                # suggestions needed
-                summed_counts = np.cumsum(unique_counts)
-                bin_needed = np.where(summed_counts > self.NUM_SUGGESTIONS)
-                if np.shape(bin_needed)[0] == 0:
-                    bin_needed = np.shape(summed_counts)[0] - 1
-                else:
-                    bin_needed = bin_needed[0][0]
-                
-                # Use all of the matches from the first few bins
-                if bin_needed > 0:
-                    good_matches = np.where(match_benefit[:, p] >= unique_benefits[bin_needed - 1])[0]
-                    num_matches_made = np.shape(good_matches)[0]
-                else:
-                    good_matches = np.empty(0)
-                    num_matches_made = 0
-                
-                # Take random matches from the last bin (because all have equal weight)
-                possible_matches = np.where(match_benefit[:, p] == unique_benefits[bin_needed])[0]
-                num_matches_needed = self.NUM_SUGGESTIONS - num_matches_made
-                
-                if num_matches_needed <= summed_counts[-1]:
-                    rand_matches = np.random.choice(possible_matches, size=num_matches_needed)
-                    matches = np.concatenate((good_matches, rand_matches)).astype(int)
-                else:
-                    matches = np.where(match_benefit[:, p])              
-                
-                
-            else:
-                matches = []
-            
-            self.faculty_suggest_matches[p] = self.student_names[matches]
-            
-        # Find good matches for students
-        for s in self.all_students:
-            
-            # Find unique benefit levels
-            unique_benefits, unique_counts = np.unique(match_benefit[s, :], return_counts=True)
-            unique_counts = np.flipud(unique_counts)
-            unique_benefits = np.flipud(unique_benefits)
-            
-            # Don't make 0-benefit suggestions
-            unique_counts = unique_counts[unique_benefits > 0]
-            unique_benefits = unique_benefits[unique_benefits > 0]
-            
-            if np.shape(unique_benefits)[0] > 0:
-                
-                # Determine how many benefit levels are needed to reach number of
-                # suggestions needed
-                summed_counts = np.cumsum(unique_counts)
-                bin_needed = np.where(summed_counts > self.NUM_SUGGESTIONS)
-                if np.shape(bin_needed)[0] == 0:
-                    bin_needed = np.shape(summed_counts)[0] - 1
-                else:
-                    bin_needed = bin_needed[0][0]                
-                
-                # Use all of the matches from the first few bins
-                if bin_needed > 0:
-                    good_matches = np.where(match_benefit[s, :] >= unique_benefits[bin_needed - 1])[0]
-                    num_matches_made = np.shape(good_matches)[0]
-                else:
-                    good_matches = np.empty(0)
-                    num_matches_made = 0
-                
-                # Take random matches from the last bin (because all have equal weight)
-                possible_matches = np.where(match_benefit[s, :] == unique_benefits[bin_needed])[0]
-                num_matches_needed = self.NUM_SUGGESTIONS - num_matches_made
-                
-                if num_matches_needed <= summed_counts[-1]:
-                    rand_matches = np.random.choice(possible_matches, size=num_matches_needed)
-                    matches = np.concatenate((good_matches, rand_matches)).astype(int)
-                else:
-                    matches = np.where(match_benefit[:, p])              
-                
-                
-            else:
-                matches = []
-            
-            self.stud_suggest_matches[s] = self.faculty_names[matches]
-            
+
     
     '''
         Convert the boolean matrix to a string matrix
@@ -949,6 +878,82 @@ class match_maker():
                 for s in self.all_students:
                     writer.writerow(array[i][s][:])  
 
+
+    '''
+        Print schedules
+        names1 = people who the schedules are for
+        names2 = people on the scheudles
+        data_array:
+                rows = candidates
+                columns = people who the schedules are for
+        person_string = string to be printed on file
+    '''
+    def print_schedules(self, person_string, folder_name, names1, schedule, good_matches):
+        
+        # Get the interview times
+        times = np.asarray(self.interview_times)
+        times.flatten()
+        schedule = np.asarray(schedule)
+        
+        # Make the folder, if it doesn't exist
+        if not path.exists(path.join(self.PATH, folder_name)):
+            makedirs(path.join(self.PATH, folder_name))
+            
+        # Print the results
+        for count, name in enumerate(names1):
+            
+            # Determine the file name
+            file_name = name + '.txt'
+            file_name = path.join(self.PATH, folder_name, file_name)
+            
+            # Open the file for editing
+            with open(file_name, 'w') as file:
+                
+                # Header
+                file.writelines(person_string + ' interivew schedule for:         ' + name + '\n')
+                file.writelines('\n')
+                file.writelines('\n')
+                
+                # Schedule
+                if self.DEBUG_PRINT_PREFERENCE:
+                    file.writelines('Time:                     Person:                 Preference:\n')
+                    for i in self.all_interviews:
+                        
+                        if self.is_odd(i):
+                            sep_string = ' +++++++++ '
+                        else:
+                            sep_string = ' --------- '
+                            
+                        file.writelines(np.array_str(times[i]) + sep_string
+                                       + schedule[count, i] + sep_string
+                                       + '\n')
+                else:
+                    file.writelines('Time:                     Person:\n')
+                    for i in self.all_interviews:
+                        
+                        if self.is_odd(i):
+                            sep_string = ' +++++++++ '
+                        else:
+                            sep_string = ' --------- '
+                            
+                        file.writelines(np.array_str(times[i]) + sep_string
+                                       + schedule[count, i]
+                                       + '\n')
+            
+                # Suggested matches
+                file.writelines('\n')
+                file.writelines('\n')
+                file.writelines('During the open interview periods, we suggest you meet with: \n')
+                
+                for match_count, match in enumerate(good_matches[count]):
+                    if match_count == 0:
+                        file.writelines(match)
+                    else:
+                        file.writelines(', ' + match)
+                        
+                file.writelines('\n')
+                file.writelines('\n')
+                
 
     '''
         Remove students and faculty that are unavailable
