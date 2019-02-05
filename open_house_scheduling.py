@@ -196,7 +196,7 @@ class match_maker():
         self.USE_RECRUITING = True
         self.RECRUITING_WEIGHT = 10
         
-        self.USE_AVAILABILITY = False
+        self.USE_AVAILABILITY = True
         self.FACULTY_AVAILABILITY_NAME = 'faculty_availability.csv'
         self.STUDENT_AVAILABILITY_NAME = 'student_availability.csv'
         
@@ -209,7 +209,7 @@ class match_maker():
         
         self.NUM_SUGGESTIONS = 2
         
-        self.MAX_SOLVER_TIME_SECONDS = 180
+        self.MAX_SOLVER_TIME_SECONDS = 20
         
         self.NUM_PREFERENCES_2_CHECK = 3
         
@@ -275,8 +275,6 @@ class match_maker():
                         similar_faculty = self.faculty_similarity[was_not_matched, faculty_choice]
                         self.cost_matrix[s, was_not_matched] += similar_faculty * self.FACULTY_SIMILARITY_WEIGHT
             
-            #self.cost_matrix[not_matched] += (self.faculty_similarity[not_matched] * self.FACULTY_SIMILARITY_WEIGHT)
-
         # Expand the cost_matrix to cover each interview period        
         self.cost_matrix = np.reshape(self.cost_matrix,
                                       (1, self.num_students, self.num_faculty))
@@ -286,7 +284,18 @@ class match_maker():
         if self.USE_WORK_LUNCH:
             self.cost_matrix[self.LUNCH_PERIOD, :, :] -= ((2 - self.will_work_lunch) * self.LUNCH_PENALTY).astype(np.int64) # The 2 is the maximum number of points we can remove for lunch weight because of response_to_weight
             
-                    
+        # Add not available slots as negative cost
+        if self.USE_AVAILABILITY:
+            
+            # Faculty
+            i_unavail, f_unavail = np.where(self.faculty_availability == 0)
+            self.cost_matrix[i_unavail, :, f_unavail] = -1 * np.abs(self.cost_matrix[i_unavail, :, f_unavail])
+            
+            # Students
+            i_unavail, s_unavail = np.where(self.student_availability == 0)
+            self.cost_matrix[i_unavail, s_unavail, :] = -1 * np.abs(self.cost_matrix[i_unavail, s_unavail, :])
+            
+            
         # Square the cost matrix to maximize chance of getting first choice
         #self.cost_matrix[self.cost_matrix < 0] = 0
         cost_sign = np.sign(self.cost_matrix)
@@ -522,7 +531,7 @@ class match_maker():
             self.faculty_availability, self.faculty_avail = self.load_availability(
                     self.FACULTY_AVAILABILITY_NAME, len(self.faculty_names))
             
-            self.remove_unavailable()
+#            self.remove_unavailable()
         
 
         
@@ -752,14 +761,14 @@ class match_maker():
                 model.Add(sum(self.interview[(p, s, i)] for i in self.all_interviews) <= 1)
                 
         # Interviews only assigned when both parties are available
-        if self.USE_AVAILABILITY:
-            for p in self.all_faculty:
-                for s in self.all_students:
-                    for i in self.all_interviews:
-                        if self.student_availability[i, s] == 0:
-                            model.Add(self.interview[(p, s, i)] == 1)
-                        if self.faculty_availability[i, p] == 0:
-                            model.Add(self.interview[(p, s, i)] == True)    
+#        if self.USE_AVAILABILITY:
+#            for p in self.all_faculty:
+#                for s in self.all_students:
+#                    for i in self.all_interviews:
+#                        if self.student_availability[i, s] == 0:
+#                            model.Add(self.interview[(p, s, i)] == 1)
+#                        if self.faculty_availability[i, p] == 0:
+#                            model.Add(self.interview[(p, s, i)] == True)    
     
         if self.USE_NUM_INTERVIEWS:
             
@@ -954,17 +963,16 @@ class match_maker():
             unique_counts = unique_counts[unique_benefits > 0]
             unique_benefits = unique_benefits[unique_benefits > 0]
             
-            # Determine how many benefit levels are needed to reach number of
-            # suggestions needed
-            summed_counts = np.cumsum(unique_counts)
-            bin_needed = np.where(summed_counts > self.NUM_SUGGESTIONS)
-            if np.shape(bin_needed)[0] == 0:
-                bin_needed = np.shape(summed_counts)[0] - 1
-            else:
-                bin_needed = bin_needed[0][0]
-            
-            
             if np.shape(unique_benefits)[0] > 0:
+                
+                # Determine how many benefit levels are needed to reach number of
+                # suggestions needed
+                summed_counts = np.cumsum(unique_counts)
+                bin_needed = np.where(summed_counts > self.NUM_SUGGESTIONS)
+                if np.shape(bin_needed)[0] == 0:
+                    bin_needed = np.shape(summed_counts)[0] - 1
+                else:
+                    bin_needed = bin_needed[0][0]
                 
                 # Use all of the matches from the first few bins
                 if bin_needed > 0:
@@ -1002,17 +1010,16 @@ class match_maker():
             unique_counts = unique_counts[unique_benefits > 0]
             unique_benefits = unique_benefits[unique_benefits > 0]
             
-            # Determine how many benefit levels are needed to reach number of
-            # suggestions needed
-            summed_counts = np.cumsum(unique_counts)
-            bin_needed = np.where(summed_counts > self.NUM_SUGGESTIONS)
-            if np.shape(bin_needed)[0] == 0:
-                bin_needed = np.shape(summed_counts)[0] - 1
-            else:
-                bin_needed = bin_needed[0][0]
-            
-            
             if np.shape(unique_benefits)[0] > 0:
+                
+                # Determine how many benefit levels are needed to reach number of
+                # suggestions needed
+                summed_counts = np.cumsum(unique_counts)
+                bin_needed = np.where(summed_counts > self.NUM_SUGGESTIONS)
+                if np.shape(bin_needed)[0] == 0:
+                    bin_needed = np.shape(summed_counts)[0] - 1
+                else:
+                    bin_needed = bin_needed[0][0]                
                 
                 # Use all of the matches from the first few bins
                 if bin_needed > 0:
