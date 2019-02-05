@@ -44,7 +44,6 @@ from __future__ import print_function
             ERROR-CHECK ANY INPUTS
             LET STUDENTS KNOW IF MATCH OR "RANDOM"
             PARALLELIZE THE MATCH CHECKER
-            MAKE THE MATCH MAKER USE THE MATCH CHECKER
             CHANGE THE FACULTY WEIGHTING TO A DIFFERENT FUNCTION BECAUSE IT SEEMS DIFFICULT TO OPTIMIZE
             
         Code accessibility:
@@ -124,6 +123,10 @@ class match_maker():
         self.MAX_SOLVER_TIME_SECONDS = 20
         
         self.NUM_PREFERENCES_2_CHECK = 3
+        
+        self.RAND_NUM_STUDENTS = 70
+        self.RAND_NUM_FACULTY = 31
+        self.RAND_NUM_INTERVIEWS = 10
         
         # Avoid using - it's slow
         # This number should be chosen so that it is larger than lunch penalty
@@ -217,14 +220,12 @@ class match_maker():
     ''' Track how many people got their preferences '''
     def check_preferences(self, matches):
         
-        NUM_PREFERENCES_2_CHECK = self.NUM_PREFERENCES_2_CHECK
-        
         # Students
         student_pref = self.student_pref * matches
         self.student_pref_objective = np.sum(student_pref, axis=1)
-        total_preferences = np.empty((NUM_PREFERENCES_2_CHECK))
-        preferences_met = np.empty((NUM_PREFERENCES_2_CHECK))
-        for pref_num in range(NUM_PREFERENCES_2_CHECK):
+        total_preferences = np.empty((self.NUM_PREFERENCES_2_CHECK))
+        preferences_met = np.empty((self.NUM_PREFERENCES_2_CHECK))
+        for pref_num in range(self.NUM_PREFERENCES_2_CHECK):
             total_preferences[pref_num] = np.sum(self.student_pref == (10 - pref_num))
             preferences_met[pref_num] = np.sum(student_pref == (10 - pref_num))
         
@@ -235,9 +236,9 @@ class match_maker():
         # Faculty
         faculty_pref = self.faculty_pref * matches
         self.faculty_pref_objective = np.sum(faculty_pref, axis=0)
-        total_preferences = np.empty((NUM_PREFERENCES_2_CHECK))
-        preferences_met = np.empty((NUM_PREFERENCES_2_CHECK))
-        for pref_num in range(NUM_PREFERENCES_2_CHECK):
+        total_preferences = np.empty((self.NUM_PREFERENCES_2_CHECK))
+        preferences_met = np.empty((self.NUM_PREFERENCES_2_CHECK))
+        for pref_num in range(self.NUM_PREFERENCES_2_CHECK):
             total_preferences[pref_num] = np.sum(self.faculty_pref == (10 - pref_num))
             preferences_met[pref_num] = np.sum(faculty_pref == (10 - pref_num))
         
@@ -248,19 +249,14 @@ class match_maker():
     ''' Randomly generate prefered matches for testing '''
     def define_random_matches(self):
         
-        # Parameters
-        NUM_STUDENTS = 70
-        num_faculty = 31
-        NUM_INTERVIEWS = 10
-        
         # Generate random matches
-        prof_pref_4_students = np.random.randint(1, high=NUM_STUDENTS, size=(NUM_STUDENTS, num_faculty))
-        stud_pref_4_profs = np.random.randint(1, high=num_faculty, size=(NUM_STUDENTS, num_faculty))
+        prof_pref_4_students = np.random.randint(1, high=self.RAND_NUM_STUDENTS, size=(self.RAND_NUM_STUDENTS, self.RAND_NUM_FACULTY))
+        stud_pref_4_profs = np.random.randint(1, high=self.RAND_NUM_FACULTY, size=(self.RAND_NUM_STUDENTS, self.RAND_NUM_FACULTY))
 
         # Calculate the objective matrix
         objective_matrix = prof_pref_4_students * stud_pref_4_profs
-        objective_matrix = np.reshape(objective_matrix, (1, NUM_STUDENTS, num_faculty))
-        objective_matrix = np.repeat(objective_matrix, NUM_INTERVIEWS, axis=0)
+        objective_matrix = np.reshape(objective_matrix, (1, self.RAND_NUM_STUDENTS, self.RAND_NUM_FACULTY))
+        objective_matrix = np.repeat(objective_matrix, self.RAND_NUM_INTERVIEWS, axis=0)
         
         self.faculty_pref = prof_pref_4_students
         self.student_pref = stud_pref_4_profs
@@ -1066,8 +1062,8 @@ class match_maker():
          
 
 class VarArrayAndObjectiveSolutionPrinter(cp_model.CpSolverSolutionCallback):
-    """Print intermediate solutions."""
-
+    
+    ''' Print intermediate solutions. '''
     def __init__(self, match_maker):
         
         cp_model.CpSolverSolutionCallback.__init__(self)
@@ -1117,7 +1113,6 @@ class VarArrayAndObjectiveSolutionPrinter(cp_model.CpSolverSolutionCallback):
             self.match_maker.check_preferences(matches)
         
         self.__solution_count += 1
-
         
 
     def solution_count(self):
