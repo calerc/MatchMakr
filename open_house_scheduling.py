@@ -32,7 +32,6 @@ from __future__ import print_function
         
         Code clarity:
             ORGANIZE FUNCTIONS
-            REMOVE REFERENCES TO CAROL'S MATCHES
             BRING UP TO PYTHON STANDARDS
             COLLECT ALL CONSTANTS INTO ONE FUNCTION
             
@@ -338,36 +337,6 @@ class match_maker():
         
         # return
         return availability, available
-    
-
-        
-    ''' 
-        Load Carol's previous matches as a comparison 
-        This can be deleted once the validity of this method has been verified
-    '''
-    def load_carol_matches(self):
-        
-        # Compare names of students (assume faculty are same)
-        matching_name_num = -1 * np.ones(self.num_students)
-        num_students_carol = len(self.carol_students)
-        for count, name in enumerate(self.student_names):
-            match_not_found = True
-            student_num = 0
-            while student_num < num_students_carol and match_not_found:
-                if name == self.carol_students[student_num]:
-                    matching_name_num[count] = student_num
-                    print('match found ' + str(count) + ' ' + name)
-                    match_not_found = False
-                student_num += 1
-                
-        # Print the names that weren't found in Carol's matches
-        names_array = np.asarray(self.student_names)
-        names_not_found = names_array[matching_name_num == -1]
-        print('Names not found:')
-        print(names_not_found)
-                
-        # Populate the array with Carols names and matches
-
         
     
     '''
