@@ -25,22 +25,20 @@ from __future__ import print_function
         Accepts a vector to match people based on their track
         Accepts an interviewer similarity score
         Provides suggestions for interview spots
+        Allows the optimizer to be time-limited
+        Stops the optimizer if it doesn't make progress
         
         
     Future features:   
-        CHANGE COMMENTS TO BENEFIT INSTEAD OF COST
-        IMPLEMENT STATUS PRINTER TO STOP WHEN GOOD SOLUTION IS FOUND
         IMPLEMENT NOT AVAILABLE SLOTS AS NEGATIVE BENEFIT
+        CHANGE COMMENTS TO BENEFIT INSTEAD OF COST
         VALIDATE THAT EVERYTHING WORKS USING LAST YEAR'S MATCHES
         ENSURE THAT ALL STUDENTS GET FAIR MATCHES, REGARDLESS OF PLACE ON LIST
-        SUGGEST MATCHES FOR FREE SPOTS
         CREATE GOOGLE SURVEYS
-        MAKE THE SCHEDULES MORE BEAUTIFUL - MAKE PRINT FUNCTION FOR SCHEDULES
         CREATE GUI
         ENSURE THAT PARAMETERS DON'T INTERFERE WITH EACH OTHER
         ERROR-CHECK ANY INPUTS
         MAKE FILES CONSTANTS
-        MAKE TIME LIMIT FOR SOLVER
         LET STUDENTS KNOW IF MATCH OR "RANDOM"
         CREATE PUBLIC GITHUB
         FIND SOMEWHERE TO HOST BINARIES
