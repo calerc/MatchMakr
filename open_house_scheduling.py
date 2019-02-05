@@ -56,6 +56,7 @@ from os import path, makedirs
 import numpy as np
 import warnings
 from ortools.sat import sat_parameters_pb2
+import sys
 
 
 class match_checker():
@@ -197,6 +198,7 @@ class match_maker():
         self.RECRUITING_WEIGHT = 10
         
         self.USE_AVAILABILITY = True
+        self.AVAILABILITY_VALUE = -1 * sys.maxsize
         self.FACULTY_AVAILABILITY_NAME = 'faculty_availability.csv'
         self.STUDENT_AVAILABILITY_NAME = 'student_availability.csv'
         
@@ -209,7 +211,7 @@ class match_maker():
         
         self.NUM_SUGGESTIONS = 2
         
-        self.MAX_SOLVER_TIME_SECONDS = 20
+        self.MAX_SOLVER_TIME_SECONDS = 60
         
         self.NUM_PREFERENCES_2_CHECK = 3
         
@@ -285,15 +287,16 @@ class match_maker():
             self.cost_matrix[self.LUNCH_PERIOD, :, :] -= ((2 - self.will_work_lunch) * self.LUNCH_PENALTY).astype(np.int64) # The 2 is the maximum number of points we can remove for lunch weight because of response_to_weight
             
         # Add not available slots as negative cost
+        # THIS CODE MUST COME LAST WHEN CALCULATING COST
         if self.USE_AVAILABILITY:
             
             # Faculty
             i_unavail, f_unavail = np.where(self.faculty_availability == 0)
-            self.cost_matrix[i_unavail, :, f_unavail] = -1 * np.abs(self.cost_matrix[i_unavail, :, f_unavail])
+            self.cost_matrix[i_unavail, :, f_unavail] = self.AVAILABILITY_VALUE
             
             # Students
             i_unavail, s_unavail = np.where(self.student_availability == 0)
-            self.cost_matrix[i_unavail, s_unavail, :] = -1 * np.abs(self.cost_matrix[i_unavail, s_unavail, :])
+            self.cost_matrix[i_unavail, s_unavail, :] = self.AVAILABILITY_VALUE
             
             
         # Square the cost matrix to maximize chance of getting first choice
@@ -776,14 +779,17 @@ class match_maker():
             for s in self.all_students:
                 num_interviews_stud = sum(
                     self.interview[(p, s, i)] for p in self.all_faculty for i in self.all_interviews)
-                model.Add(self.MIN_INTERVIEWS <= num_interviews_stud)
+                if not self.USE_AVAILABILITY:
+                    model.Add(self.MIN_INTERVIEWS <= num_interviews_stud)
                 model.Add(num_interviews_stud <= self.MAX_INTERVIEWS)
         
             # Ensure that no professor gets too many or too few interviews
             for p in self.all_faculty:
                 num_interviews_prof = sum(
                     self.interview[(p, s, i)] for s in self.all_students for i in self.all_interviews)
-                model.Add(self.MIN_INTERVIEWS <= num_interviews_prof)
+                
+                if not self.USE_AVAILABILITY:
+                    model.Add(self.MIN_INTERVIEWS <= num_interviews_prof)
                 model.Add(num_interviews_prof <= self.MAX_INTERVIEWS)
         
         # Define the minimization of cost
