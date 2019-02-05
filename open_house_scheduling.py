@@ -67,6 +67,7 @@ import numpy as np
 import warnings
 from ortools.sat import sat_parameters_pb2
 import sys
+import multiprocessing
 
 
 class match_maker():
@@ -266,6 +267,23 @@ class match_maker():
         # Faculty
         return(prof_pref_4_students, stud_pref_4_profs, objective_matrix)
         
+
+    ''' Determine how many cpus to use '''
+    def get_cpu_2_use(self):
+        
+        num_cpus_avail = multiprocessing.cpu_count()
+        
+        if sys.platform == "linux" or sys.platform == "linux2":
+            self.num_cpus = num_cpus_avail
+        elif sys.platform == "darwin":
+            self.num_cpus = num_cpus_avail
+        elif sys.platform == "win32":
+            self.num_cpus = num_cpus_avail - 1 # This improves stability
+        else:
+            warnings.warn('Operating System not recognized.  Use default number of cores')
+            self.num_cpus = num_cpus_avail - 1
+            
+        return self.num_cpus
 
     ''' Check what names should be appended to student array '''
     def get_unique_student_names(self, new_names):
@@ -708,7 +726,8 @@ class match_maker():
         solution_printer = VarArrayAndObjectiveSolutionPrinter(self)
         
         print('Setting up workers...', flush=True)
-        solver.parameters = sat_parameters_pb2.SatParameters(num_search_workers=8)
+        self.get_cpu_2_use()
+        solver.parameters = sat_parameters_pb2.SatParameters(num_search_workers=self.num_cpus)
         solver.parameters.max_time_in_seconds = self.MAX_SOLVER_TIME_SECONDS
         
         print('Solving model...', flush=True)
