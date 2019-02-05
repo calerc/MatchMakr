@@ -28,8 +28,7 @@ from __future__ import print_function
         Allows the optimizer to be time-limited
         
         
-    Future features:   
-        IMPLEMENT NOT AVAILABLE SLOTS AS NEGATIVE BENEFIT
+    Future features:
         CHANGE COMMENTS TO BENEFIT INSTEAD OF COST
         VALIDATE THAT EVERYTHING WORKS USING LAST YEAR'S MATCHES
         ENSURE THAT ALL STUDENTS GET FAIR MATCHES, REGARDLESS OF PLACE ON LIST
@@ -761,17 +760,7 @@ class match_maker():
         # No student is assigned to the same professor twice
         for s in self.all_students:
             for p in self.all_faculty:
-                model.Add(sum(self.interview[(p, s, i)] for i in self.all_interviews) <= 1)
-                
-        # Interviews only assigned when both parties are available
-#        if self.USE_AVAILABILITY:
-#            for p in self.all_faculty:
-#                for s in self.all_students:
-#                    for i in self.all_interviews:
-#                        if self.student_availability[i, s] == 0:
-#                            model.Add(self.interview[(p, s, i)] == 1)
-#                        if self.faculty_availability[i, p] == 0:
-#                            model.Add(self.interview[(p, s, i)] == True)    
+                model.Add(sum(self.interview[(p, s, i)] for i in self.all_interviews) <= 1)  
     
         if self.USE_NUM_INTERVIEWS:
             
@@ -819,7 +808,6 @@ class match_maker():
         
         print('Solving model...', flush=True)
         status = solver.SolveWithSolutionCallback(model, solution_printer)   
-#        status = solver.Solve(model)
         
         print(solver.StatusName(status))
  
@@ -882,7 +870,6 @@ class match_maker():
             makedirs(path.join(self.PATH, folder_name))
             
         # Print the results
-#        num_schedules = len(names1)
         for count, name in enumerate(names1):
             
             # Determine the file name
@@ -1051,20 +1038,6 @@ class match_maker():
             
             self.stud_suggest_matches[s] = self.faculty_names[matches]
             
-            '''
-            unique_benefits = np.flipud(np.unique(match_benefit[s, :]))
-            if np.shape(unique_benefits)[0] >= self.NUM_SUGGESTIONS:
-                is_greater_than_zero = match_benefit[s, :] > 0
-                is_ranked_highly = match_benefit[s, :] >= unique_benefits[self.NUM_SUGGESTIONS - 1]
-                good_matches = np.where(np.logical_and(is_ranked_highly, is_greater_than_zero))
-            else:
-                good_matches = np.where(match_benefit[s, :])
-            
-            matches = self.faculty_names[good_matches]
-            self.stud_suggest_matches[s] = matches
-            '''
-        
-        
     
     '''
         Convert the boolean matrix to a string matrix
