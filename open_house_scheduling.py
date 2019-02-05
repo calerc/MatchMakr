@@ -31,8 +31,8 @@ from __future__ import print_function
     Future features:
         
         Code clarity:
-            ORGANIZE FUNCTIONS
             BRING UP TO PYTHON STANDARDS
+            ENSURE THAT THE DOCUMENTATION IS UP TO SNUFF
             
         Code function:
             VALIDATE THAT EVERYTHING WORKS USING LAST YEAR'S MATCHES
@@ -43,7 +43,6 @@ from __future__ import print_function
             ERROR-CHECK ANY INPUTS
             LET STUDENTS KNOW IF MATCH OR "RANDOM"
             PARALLELIZE THE MATCH CHECKER
-            CHANGE THE FACULTY WEIGHTING TO A DIFFERENT FUNCTION BECAUSE IT SEEMS DIFFICULT TO OPTIMIZE
             
         Code accessibility:
             CREATE GUI
