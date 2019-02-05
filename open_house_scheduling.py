@@ -31,10 +31,7 @@ from __future__ import print_function
     Future features:
         
         Code clarity:
-            CHANGE COMMENTS TO BENEFIT INSTEAD OF COST
-            CHANGE FROM STUDENTS/FACULTY TO INTERVIEWER/INTERVIEWEE (BUT MORE CLEAR)
             ORGANIZE FUNCTIONS
-            MAKE FILES CONSTANTS
             REMOVE REFERENCES TO CAROL'S MATCHES
             BRING UP TO PYTHON STANDARDS
             COLLECT ALL CONSTANTS INTO ONE FUNCTION
@@ -42,11 +39,11 @@ from __future__ import print_function
         Code function:
             VALIDATE THAT EVERYTHING WORKS USING LAST YEAR'S MATCHES
             ENSURE THAT ALL STUDENTS GET FAIR MATCHES, REGARDLESS OF PLACE ON LIST
+                This is difficult to do because last year's matches were "alphabetized"
             CREATE GOOGLE SURVEYS
             ENSURE THAT PARAMETERS DON'T INTERFERE WITH EACH OTHER
             ERROR-CHECK ANY INPUTS
             LET STUDENTS KNOW IF MATCH OR "RANDOM"
-            CHECK NUMBER OF CORES AND USE ONLY THE NUMBER AVAILABLE
             PARALLELIZE THE MATCH CHECKER
             MAKE THE MATCH MAKER USE THE MATCH CHECKER
             CHANGE THE FACULTY WEIGHTING TO A DIFFERENT FUNCTION BECAUSE IT SEEMS DIFFICULT TO OPTIMIZE
@@ -91,6 +88,11 @@ class match_maker():
         self.STUDENT_PREF = "stud_pref_order.csv"
         self.FACULTY_PREF = "faculty_preferences.csv"
         self.TIMES_NAME = "interview_times.csv"
+        self.FACULTY_TRACK_FILE_NAME='faculty_tracks.csv'
+        self.STUDENT_TRACK_FILE_NAME='student_tracks.csv'
+        self.FACULTY_SIMILARITY_FILE_NAME='faculty_similarity.csv'
+        self.IS_RECRUITING_FILE_NAME='faculty_is_recruiting.csv'
+        self.LUNCH_FILE_NAME='faculty_work_lunch.csv'
         
         self.student_names = []
         self.faculty_names = []
@@ -106,7 +108,7 @@ class match_maker():
         self.USE_RECRUITING = True
         self.RECRUITING_WEIGHT = 10
         
-        self.USE_AVAILABILITY = True
+        self.USE_AVAILABILITY = False
         self.AVAILABILITY_VALUE = -1 * sys.maxsize
         self.FACULTY_AVAILABILITY_NAME = 'faculty_availability.csv'
         self.STUDENT_AVAILABILITY_NAME = 'student_availability.csv'
@@ -120,7 +122,7 @@ class match_maker():
         
         self.NUM_SUGGESTIONS = 2
         
-        self.MAX_SOLVER_TIME_SECONDS = 180
+        self.MAX_SOLVER_TIME_SECONDS = 20
         
         self.NUM_PREFERENCES_2_CHECK = 3
         
@@ -374,8 +376,8 @@ class match_maker():
     def load_track_data(self):
         
         # Get the track data from files
-        self.faculty_tracks = self.load_data_from_human_readable('faculty_tracks.csv')
-        self.student_tracks = self.load_data_from_human_readable('student_tracks.csv')
+        self.faculty_tracks = self.load_data_from_human_readable(self.FACULTY_TRACK_FILE_NAME)
+        self.student_tracks = self.load_data_from_human_readable(self.STUDENT_TRACK_FILE_NAME)
         
         # Find students and faculty that are in the same track
         all_tracks = np.concatenate((self.faculty_tracks, self.student_tracks), axis=1)
@@ -410,7 +412,7 @@ class match_maker():
     def load_faculty_similarity(self):
         
         # Load the matrix data
-        self.faculty_similarity = self.load_matrix_data('faculty_similarity.csv')
+        self.faculty_similarity = self.load_matrix_data(self.FACULTY_SIMILARITY_FILE_NAME)
         
         # Convert to an array
         self.faculty_similarity = np.asarray(self.faculty_similarity, dtype=int)
@@ -429,7 +431,6 @@ class match_maker():
         
         # Load the preference data
         self.load_preference_data()        
-        self.carol_matches = self.load_data_from_human_readable('assignments.csv') # Remove this after testing
 
         # Load the track data
         if self.USE_TRACKS:
@@ -441,11 +442,11 @@ class match_maker():
         
         # Load the lunch and recruiting weight data
         if self.USE_RECRUITING:
-            self.is_recruiting = self.load_data_from_human_readable('faculty_is_recruiting.csv', False)
+            self.is_recruiting = self.load_data_from_human_readable(self.IS_RECRUITING_FILE_NAME, False)
             self.is_recruiting = self.response_to_weight(self.is_recruiting)
             
         if self.USE_WORK_LUNCH:
-            self.will_work_lunch = self.load_data_from_human_readable('faculty_work_lunch.csv', False)
+            self.will_work_lunch = self.load_data_from_human_readable(self.LUNCH_FILE_NAME, False)
             self.will_work_lunch = self.response_to_weight(self.will_work_lunch)
         
         # Load the availability data
