@@ -29,22 +29,33 @@ from __future__ import print_function
         
         
     Future features:
-        CHANGE COMMENTS TO BENEFIT INSTEAD OF COST
-        VALIDATE THAT EVERYTHING WORKS USING LAST YEAR'S MATCHES
-        ENSURE THAT ALL STUDENTS GET FAIR MATCHES, REGARDLESS OF PLACE ON LIST
-        CREATE GOOGLE SURVEYS
-        CREATE GUI
-        ENSURE THAT PARAMETERS DON'T INTERFERE WITH EACH OTHER
-        ERROR-CHECK ANY INPUTS
-        MAKE FILES CONSTANTS
-        LET STUDENTS KNOW IF MATCH OR "RANDOM"
-        CREATE PUBLIC GITHUB
-        FIND SOMEWHERE TO HOST BINARIES
-        VIDEO TO YOUTUBE
-        ORGANIZE FUNCTIONS
-        CHECK NUMBER OF CORES AND USE ONLY THE NUMBER AVAILABLE
-        PARALLELIZE THE MATCH CHECKER
-        MAKE THE MATCH MAKER USE THE MATCH CHECKER
+        
+        Code clarity:
+            CHANGE COMMENTS TO BENEFIT INSTEAD OF COST
+            CHANGE FROM STUDENTS/FACULTY TO INTERVIEWER/INTERVIEWEE (BUT MORE CLEAR)
+            ORGANIZE FUNCTIONS
+            MAKE FILES CONSTANTS
+            REMOVE REFERENCES TO CAROL'S MATCHES
+            BRING UP TO PYTHON STANDARDS
+            COLLECT ALL CONSTANTS INTO ONE FUNCTION
+            
+        Code function:
+            VALIDATE THAT EVERYTHING WORKS USING LAST YEAR'S MATCHES
+            ENSURE THAT ALL STUDENTS GET FAIR MATCHES, REGARDLESS OF PLACE ON LIST
+            CREATE GOOGLE SURVEYS
+            ENSURE THAT PARAMETERS DON'T INTERFERE WITH EACH OTHER
+            ERROR-CHECK ANY INPUTS
+            LET STUDENTS KNOW IF MATCH OR "RANDOM"
+            CHECK NUMBER OF CORES AND USE ONLY THE NUMBER AVAILABLE
+            PARALLELIZE THE MATCH CHECKER
+            MAKE THE MATCH MAKER USE THE MATCH CHECKER
+            CHANGE THE FACULTY WEIGHTING TO A DIFFERENT FUNCTION BECAUSE IT SEEMS DIFFICULT TO OPTIMIZE
+            
+        Code accessibility:
+            CREATE GUI
+            CREATE PUBLIC GITHUB
+            FIND SOMEWHERE TO HOST BINARIES
+            VIDEO TO YOUTUBE        
 '''
 
 
@@ -58,108 +69,6 @@ from ortools.sat import sat_parameters_pb2
 import sys
 
 
-class match_checker():
-    
-    def __init__(self, student_pref, faculty_pref):
-        self.student_pref = student_pref
-        self.faculty_pref = faculty_pref
-        
-    def check_matches(self, matches):
-        
-        NUM_PREFERENCES_2_CHECK = 3
-        
-        # Students
-        student_pref = self.student_pref * matches
-        self.student_pref_cost = np.sum(student_pref, axis=1)
-        total_preferences = np.empty((NUM_PREFERENCES_2_CHECK))
-        preferences_met = np.empty((NUM_PREFERENCES_2_CHECK))
-        for pref_num in range(NUM_PREFERENCES_2_CHECK):
-            total_preferences[pref_num] = np.sum(self.student_pref == (10 - pref_num))
-            preferences_met[pref_num] = np.sum(student_pref == (10 - pref_num))
-        
-        self.student_fraction_preferences_met = preferences_met / total_preferences
-        print('Fraction of student preferences met: ')
-        print(self.student_fraction_preferences_met)
-        
-        # Faculty
-        faculty_pref = self.faculty_pref * matches
-        self.faculty_pref_cost = np.sum(faculty_pref, axis=0)
-        total_preferences = np.empty((NUM_PREFERENCES_2_CHECK))
-        preferences_met = np.empty((NUM_PREFERENCES_2_CHECK))
-        for pref_num in range(NUM_PREFERENCES_2_CHECK):
-            total_preferences[pref_num] = np.sum(self.faculty_pref == (10 - pref_num))
-            preferences_met[pref_num] = np.sum(faculty_pref == (10 - pref_num))
-        
-        self.faculty_fraction_preferences_met = preferences_met / total_preferences
-        print('Fraction of faculty preferences met: ')
-        print(self.faculty_fraction_preferences_met)
-        
-        return self.faculty_fraction_preferences_met, self.student_fraction_preferences_met
-        
-        
-        
-
-class VarArrayAndObjectiveSolutionPrinter(cp_model.CpSolverSolutionCallback):
-    """Print intermediate solutions."""
-
-    def __init__(self, match_maker):
-        
-        cp_model.CpSolverSolutionCallback.__init__(self)
-        
-        self.match_maker = match_maker
-        self.variables = match_maker.interview
-        
-        self.CHECK_MATCHES = True
-        self.CHECK_FREQUENCY = 20
-        self.STOP_ON_NO_CHANGE = True
-        
-        if self.CHECK_MATCHES:
-            self.match_checker = match_checker(match_maker.student_pref, match_maker.faculty_pref)
-            self.last_stud_percent = np.zeros((1, self.match_maker.NUM_PREFERENCES_2_CHECK))
-            self.last_faculty_percent = np.zeros((1, self.match_maker.NUM_PREFERENCES_2_CHECK))
-            
-        
-        self.__solution_count = 0
-
-
-    def on_solution_callback(self):
-        
-        # Get sizes
-        num_faculty = self.match_maker.num_faculty
-        num_students = self.match_maker.num_students
-        num_interviews = self.match_maker.NUM_INTERVIEWS
-        
-        # Print objective value
-        print('Solution %i' % self.__solution_count)
-        print('  objective value = %i' % self.ObjectiveValue())
-        
-        
-        # Determine what matches were made
-        if self.CHECK_MATCHES and (self.__solution_count % self.CHECK_FREQUENCY == 0):
-            
-            values = np.empty((num_students, num_faculty, num_interviews))
-            for p in range(num_faculty):
-                for s in range(num_students):
-                    for i in range(num_interviews):
-                        the_key = (p, s, i)
-                        the_variable = self.variables[the_key]
-                        values[s, p, i] = self.Value(the_variable)
-            
-            values = np.asarray(values)
-            
-            # Determine number of matches made for preferences
-            matches = np.sum(values, axis=2)
-            self.match_checker.check_matches(matches)
-        
-        self.__solution_count += 1
-
-        
-
-    def solution_count(self):
-        return self.__solution_count
-
-
-
 class match_maker():
        
     
@@ -167,7 +76,7 @@ class match_maker():
     def __init__(self):
         
         # Constants
-        self.FACULTY_ADVANTAGE = 50
+        self.FACULTY_ADVANTAGE = 50 # This number hurts students, and it doesn't seem to affect faculty.  Must be between 0-100
         self.NUM_INTERVIEWS = 10
         
         self.USE_NUM_INTERVIEWS = True
@@ -210,7 +119,7 @@ class match_maker():
         
         self.NUM_SUGGESTIONS = 2
         
-        self.MAX_SOLVER_TIME_SECONDS = 60
+        self.MAX_SOLVER_TIME_SECONDS = 180
         
         self.NUM_PREFERENCES_2_CHECK = 3
         
@@ -246,24 +155,24 @@ class match_maker():
             
         return data
     
-    ''' Transform the data into cost matrix'''
-    def calc_cost_matrix(self):
+    ''' Transform the data into objective matrix'''
+    def calc_objective_matrix(self):
         
         # Determine how to weight faculty preferences over student preferences
         alpha = self.FACULTY_ADVANTAGE
         beta = 100 - alpha
-        self.cost_matrix = (alpha * self.faculty_pref + beta * self.student_pref).astype(int)
+        self.objective_matrix = (alpha * self.faculty_pref + beta * self.student_pref).astype(int)
         
         # Give recruiting faculty an advantage
         if self.USE_RECRUITING:
-            self.cost_matrix += (self.is_recruiting * self.RECRUITING_WEIGHT).astype(np.int64)
+            self.objective_matrix += (self.is_recruiting * self.RECRUITING_WEIGHT).astype(np.int64)
             
         # Add a benefit for being in the same track, but only if currently not
         # matched
-        not_matched = self.cost_matrix == 0
+        not_matched = self.objective_matrix == 0
         if self.USE_TRACKS:
             add_track_advantage = np.logical_and(not_matched, self.same_track == 1)
-            self.cost_matrix[add_track_advantage] += self.TRACK_WEIGHT
+            self.objective_matrix[add_track_advantage] += self.TRACK_WEIGHT
             
         # Add a benefit to similar faculty, if not matched, for students top n faculty
         if self.USE_FACULTY_SIMILARITY:
@@ -274,35 +183,34 @@ class match_maker():
                     if np.shape(faculty_choice)[1] > 0:
                         was_not_matched = np.where(not_matched[s, :])
                         similar_faculty = self.faculty_similarity[was_not_matched, faculty_choice]
-                        self.cost_matrix[s, was_not_matched] += similar_faculty * self.FACULTY_SIMILARITY_WEIGHT
+                        self.objective_matrix[s, was_not_matched] += similar_faculty * self.FACULTY_SIMILARITY_WEIGHT
             
-        # Expand the cost_matrix to cover each interview period        
-        self.cost_matrix = np.reshape(self.cost_matrix,
+        # Expand the objective_matrix to cover each interview period        
+        self.objective_matrix = np.reshape(self.objective_matrix,
                                       (1, self.num_students, self.num_faculty))
-        self.cost_matrix = np.repeat(self.cost_matrix, self.NUM_INTERVIEWS, axis=0)
+        self.objective_matrix = np.repeat(self.objective_matrix, self.NUM_INTERVIEWS, axis=0)
         
         # Add a cost for working during lunch
         if self.USE_WORK_LUNCH:
-            self.cost_matrix[self.LUNCH_PERIOD, :, :] -= ((2 - self.will_work_lunch) * self.LUNCH_PENALTY).astype(np.int64) # The 2 is the maximum number of points we can remove for lunch weight because of response_to_weight
+            self.objective_matrix[self.LUNCH_PERIOD, :, :] -= ((2 - self.will_work_lunch) * self.LUNCH_PENALTY).astype(np.int64) # The 2 is the maximum number of points we can remove for lunch weight because of response_to_weight
             
-        # Add not available slots as negative cost
+        # Add not available slots as cost
         # THIS CODE MUST COME LAST WHEN CALCULATING COST
         if self.USE_AVAILABILITY:
             
             # Faculty
             i_unavail, f_unavail = np.where(self.faculty_availability == 0)
-            self.cost_matrix[i_unavail, :, f_unavail] = self.AVAILABILITY_VALUE
+            self.objective_matrix[i_unavail, :, f_unavail] = self.AVAILABILITY_VALUE
             
             # Students
             i_unavail, s_unavail = np.where(self.student_availability == 0)
-            self.cost_matrix[i_unavail, s_unavail, :] = self.AVAILABILITY_VALUE
+            self.objective_matrix[i_unavail, s_unavail, :] = self.AVAILABILITY_VALUE
             
             
-        # Square the cost matrix to maximize chance of getting first choice
-        #self.cost_matrix[self.cost_matrix < 0] = 0
-        cost_sign = np.sign(self.cost_matrix)
-        self.cost_matrix = np.power(self.cost_matrix, self.CHOICE_EXPONENT)
-        self.cost_matrix *= cost_sign
+        # Square the objective matrix to maximize chance of getting first choice
+        objective_sign = np.sign(self.objective_matrix)
+        self.objective_matrix = np.power(self.objective_matrix, self.CHOICE_EXPONENT)
+        self.objective_matrix *= objective_sign
 
     ''' Track how many people got their preferences '''
     def check_preferences(self, matches):
@@ -311,7 +219,7 @@ class match_maker():
         
         # Students
         student_pref = self.student_pref * matches
-        self.student_pref_cost = np.sum(student_pref, axis=1)
+        self.student_pref_objective = np.sum(student_pref, axis=1)
         total_preferences = np.empty((NUM_PREFERENCES_2_CHECK))
         preferences_met = np.empty((NUM_PREFERENCES_2_CHECK))
         for pref_num in range(NUM_PREFERENCES_2_CHECK):
@@ -324,7 +232,7 @@ class match_maker():
         
         # Faculty
         faculty_pref = self.faculty_pref * matches
-        self.faculty_pref_cost = np.sum(faculty_pref, axis=0)
+        self.faculty_pref_objective = np.sum(faculty_pref, axis=0)
         total_preferences = np.empty((NUM_PREFERENCES_2_CHECK))
         preferences_met = np.empty((NUM_PREFERENCES_2_CHECK))
         for pref_num in range(NUM_PREFERENCES_2_CHECK):
@@ -347,16 +255,16 @@ class match_maker():
         prof_pref_4_students = np.random.randint(1, high=NUM_STUDENTS, size=(NUM_STUDENTS, num_faculty))
         stud_pref_4_profs = np.random.randint(1, high=num_faculty, size=(NUM_STUDENTS, num_faculty))
 
-        # Calculate the cost matrix
-        cost_matrix = prof_pref_4_students * stud_pref_4_profs
-        cost_matrix = np.reshape(cost_matrix, (1, NUM_STUDENTS, num_faculty))
-        cost_matrix = np.repeat(cost_matrix, NUM_INTERVIEWS, axis=0)
+        # Calculate the objective matrix
+        objective_matrix = prof_pref_4_students * stud_pref_4_profs
+        objective_matrix = np.reshape(objective_matrix, (1, NUM_STUDENTS, num_faculty))
+        objective_matrix = np.repeat(objective_matrix, NUM_INTERVIEWS, axis=0)
         
         self.faculty_pref = prof_pref_4_students
         self.student_pref = stud_pref_4_profs
         
         # Faculty
-        return(prof_pref_4_students, stud_pref_4_profs, cost_matrix)
+        return(prof_pref_4_students, stud_pref_4_profs, objective_matrix)
         
 
     ''' Check what names should be appended to student array '''
@@ -532,13 +440,10 @@ class match_maker():
             # Faculty
             self.faculty_availability, self.faculty_avail = self.load_availability(
                     self.FACULTY_AVAILABILITY_NAME, len(self.faculty_names))
-            
-#            self.remove_unavailable()
-        
 
         
-        # Calculate the cost matrix
-        self.calc_cost_matrix()
+        # Calculate the objective matrix
+        self.calc_objective_matrix()
 
                 
     ''' Old load function.  Here for documentation '''
@@ -733,10 +638,10 @@ class match_maker():
         # Creates the model.
         model = cp_model.CpModel()
     
-        # Get cost matrix
+        # Get objective matrix
         #self.define_random_matches()
         self.load_data()
-        cost_matrix = self.cost_matrix
+        objective_matrix = self.objective_matrix
         
         # Creates interview variables.
         # interview[(p, s, i)]: professor 'p' interviews student 's' for interview number 'i'
@@ -781,18 +686,18 @@ class match_maker():
                     model.Add(self.MIN_INTERVIEWS <= num_interviews_prof)
                 model.Add(num_interviews_prof <= self.MAX_INTERVIEWS)
         
-        # Define the minimization of cost
+        # Define the maximization of the objective
         print('Building Maximization term...')
         if self.EMPTY_PENALTY != 0:
             model.Maximize(
-                sum(cost_matrix[i][s][p] * self.interview[(p, s, i)]
+                sum(objective_matrix[i][s][p] * self.interview[(p, s, i)]
                     + self.EMPTY_PENALTY * self.interview[(p, s, i)]
                 for p in self.all_faculty
                 for s in self.all_students
                 for i in self.all_interviews))
         else:
             model.Maximize(
-                sum(cost_matrix[i][s][p] * self.interview[(p, s, i)]
+                sum(objective_matrix[i][s][p] * self.interview[(p, s, i)]
                 for p in self.all_faculty
                 for s in self.all_students
                 for i in self.all_interviews))
@@ -819,8 +724,6 @@ class match_maker():
                 for p in self.all_faculty:
                     for s in self.all_students:
                         results[i][s][p] = solver.Value(self.interview[(p, s, i)])
-            print(results)     
-        
              
             # Save the results
             self.results = results
@@ -942,7 +845,7 @@ class match_maker():
         elif self.NUM_INTERVIEWS > 0:
             period = 1
         
-        match_benefit = matches * self.cost_matrix[period]
+        match_benefit = matches * self.objective_matrix[period]
         
         # Find good matches for faculty
         for p in self.all_faculty:
@@ -1119,8 +1022,7 @@ class match_maker():
             writer = csv.writer(csvfile, delimiter=',')
             for i in self.all_interviews:
                 for s in self.all_students:
-                    writer.writerow(array[i][s][:])
-                print('\n')     
+                    writer.writerow(array[i][s][:])  
 
 
     '''
@@ -1177,7 +1079,106 @@ class match_maker():
     
     
     
+class match_checker():
+    
+    def __init__(self, student_pref, faculty_pref):
+        self.student_pref = student_pref
+        self.faculty_pref = faculty_pref
+        
+    def check_matches(self, matches):
+        
+        NUM_PREFERENCES_2_CHECK = 3
+        
+        # Students
+        student_pref = self.student_pref * matches
+        self.student_pref_objective = np.sum(student_pref, axis=1)
+        total_preferences = np.empty((NUM_PREFERENCES_2_CHECK))
+        preferences_met = np.empty((NUM_PREFERENCES_2_CHECK))
+        for pref_num in range(NUM_PREFERENCES_2_CHECK):
+            total_preferences[pref_num] = np.sum(self.student_pref == (10 - pref_num))
+            preferences_met[pref_num] = np.sum(student_pref == (10 - pref_num))
+        
+        self.student_fraction_preferences_met = preferences_met / total_preferences
+        print('Fraction of student preferences met: ')
+        print(self.student_fraction_preferences_met)
+        
+        # Faculty
+        faculty_pref = self.faculty_pref * matches
+        self.faculty_pref_objective = np.sum(faculty_pref, axis=0)
+        total_preferences = np.empty((NUM_PREFERENCES_2_CHECK))
+        preferences_met = np.empty((NUM_PREFERENCES_2_CHECK))
+        for pref_num in range(NUM_PREFERENCES_2_CHECK):
+            total_preferences[pref_num] = np.sum(self.faculty_pref == (10 - pref_num))
+            preferences_met[pref_num] = np.sum(faculty_pref == (10 - pref_num))
+        
+        self.faculty_fraction_preferences_met = preferences_met / total_preferences
+        print('Fraction of faculty preferences met: ')
+        print(self.faculty_fraction_preferences_met)
+        
+        return self.faculty_fraction_preferences_met, self.student_fraction_preferences_met
+         
 
+class VarArrayAndObjectiveSolutionPrinter(cp_model.CpSolverSolutionCallback):
+    """Print intermediate solutions."""
+
+    def __init__(self, match_maker):
+        
+        cp_model.CpSolverSolutionCallback.__init__(self)
+        
+        self.match_maker = match_maker
+        self.variables = match_maker.interview
+        
+        self.CHECK_MATCHES = True
+        self.CHECK_FREQUENCY = 20
+        self.STOP_ON_NO_CHANGE = True
+        
+        if self.CHECK_MATCHES:
+            self.match_checker = match_checker(match_maker.student_pref, match_maker.faculty_pref)
+            self.last_stud_percent = np.zeros((1, self.match_maker.NUM_PREFERENCES_2_CHECK))
+            self.last_faculty_percent = np.zeros((1, self.match_maker.NUM_PREFERENCES_2_CHECK))
+            
+        
+        self.__solution_count = 0
+
+
+    def on_solution_callback(self):
+        
+        # Get sizes
+        num_faculty = self.match_maker.num_faculty
+        num_students = self.match_maker.num_students
+        num_interviews = self.match_maker.NUM_INTERVIEWS
+        
+        # Print objective value
+        print('Solution %i' % self.__solution_count)
+        print('  objective value = %i' % self.ObjectiveValue())
+        
+        
+        # Determine what matches were made
+        if self.CHECK_MATCHES and (self.__solution_count % self.CHECK_FREQUENCY == 0):
+            
+            values = np.empty((num_students, num_faculty, num_interviews))
+            for p in range(num_faculty):
+                for s in range(num_students):
+                    for i in range(num_interviews):
+                        the_key = (p, s, i)
+                        the_variable = self.variables[the_key]
+                        values[s, p, i] = self.Value(the_variable)
+            
+            values = np.asarray(values)
+            
+            # Determine number of matches made for preferences
+            matches = np.sum(values, axis=2)
+            self.match_checker.check_matches(matches)
+        
+        self.__solution_count += 1
+
+        
+
+    def solution_count(self):
+        return self.__solution_count
+    
+    
+    
 
 if __name__ == '__main__':
     
