@@ -26,7 +26,6 @@ from __future__ import print_function
         Accepts an interviewer similarity score
         Provides suggestions for interview spots
         Allows the optimizer to be time-limited
-        Stops the optimizer if it doesn't make progress
         
         
     Future features:   
@@ -111,7 +110,7 @@ class VarArrayAndObjectiveSolutionPrinter(cp_model.CpSolverSolutionCallback):
         self.variables = match_maker.interview
         
         self.CHECK_MATCHES = True
-        self.CHECK_FREQUENCY = 5
+        self.CHECK_FREQUENCY = 20
         self.STOP_ON_NO_CHANGE = True
         
         if self.CHECK_MATCHES:
@@ -151,20 +150,6 @@ class VarArrayAndObjectiveSolutionPrinter(cp_model.CpSolverSolutionCallback):
             # Determine number of matches made for preferences
             matches = np.sum(values, axis=2)
             self.match_checker.check_matches(matches)
-#            stud_percent, faculty_percent = self.match_checker.check_matches(matches)
-#            
-#            diff_percent = np.concatenate((stud_percent, faculty_percent))
-#            last_diff_percent = np.concatenate((self.last_stud_percent, self.last_faculty_percent), axis=1)
-#            percent = (diff_percent - last_diff_percent)[0]
-#            self.last_stud_percent = stud_percent
-#            self.last_faculty_percent = faculty_percent
-#            
-#            print('Percent Difference: ')
-#            print(percent)
-#            
-#            if self.STOP_ON_NO_CHANGE:
-#                if np.all(percent == 0):
-#                    self.StopSearch()
         
         self.__solution_count += 1
 
@@ -215,7 +200,7 @@ class match_maker():
         self.FACULTY_AVAILABILITY_NAME = 'faculty_availability.csv'
         self.STUDENT_AVAILABILITY_NAME = 'student_availability.csv'
         
-        self.USE_TRACKS = False
+        self.USE_TRACKS = True
         self.TRACK_WEIGHT = 1
         
         self.USE_FACULTY_SIMILARITY = True
