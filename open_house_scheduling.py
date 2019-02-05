@@ -46,6 +46,9 @@ from __future__ import print_function
         FIND SOMEWHERE TO HOST BINARIES
         VIDEO TO YOUTUBE
         ORGANIZE FUNCTIONS
+        CHECK NUMBER OF CORES AND USE ONLY THE NUMBER AVAILABLE
+        PARALLELIZE THE MATCH CHECKER
+        MAKE THE MATCH MAKER USE THE MATCH CHECKER
 '''
 
 
@@ -58,49 +61,114 @@ import warnings
 from ortools.sat import sat_parameters_pb2
 
 
+class match_checker():
+    
+    def __init__(self, student_pref, faculty_pref):
+        self.student_pref = student_pref
+        self.faculty_pref = faculty_pref
+        
+    def check_matches(self, matches):
+        
+        NUM_PREFERENCES_2_CHECK = 3
+        
+        # Students
+        student_pref = self.student_pref * matches
+        self.student_pref_cost = np.sum(student_pref, axis=1)
+        total_preferences = np.empty((NUM_PREFERENCES_2_CHECK))
+        preferences_met = np.empty((NUM_PREFERENCES_2_CHECK))
+        for pref_num in range(NUM_PREFERENCES_2_CHECK):
+            total_preferences[pref_num] = np.sum(self.student_pref == (10 - pref_num))
+            preferences_met[pref_num] = np.sum(student_pref == (10 - pref_num))
+        
+        self.student_fraction_preferences_met = preferences_met / total_preferences
+        print('Fraction of student preferences met: ')
+        print(self.student_fraction_preferences_met)
+        
+        # Faculty
+        faculty_pref = self.faculty_pref * matches
+        self.faculty_pref_cost = np.sum(faculty_pref, axis=0)
+        total_preferences = np.empty((NUM_PREFERENCES_2_CHECK))
+        preferences_met = np.empty((NUM_PREFERENCES_2_CHECK))
+        for pref_num in range(NUM_PREFERENCES_2_CHECK):
+            total_preferences[pref_num] = np.sum(self.faculty_pref == (10 - pref_num))
+            preferences_met[pref_num] = np.sum(faculty_pref == (10 - pref_num))
+        
+        self.faculty_fraction_preferences_met = preferences_met / total_preferences
+        print('Fraction of faculty preferences met: ')
+        print(self.faculty_fraction_preferences_met)
+        
+        return self.faculty_fraction_preferences_met, self.student_fraction_preferences_met
+        
+        
+        
+
 class VarArrayAndObjectiveSolutionPrinter(cp_model.CpSolverSolutionCallback):
     """Print intermediate solutions."""
 
-    def __init__(self, variables, student_pref, faculty_pref, num_faculty, num_students, num_interviews):
+    def __init__(self, match_maker):
+        
         cp_model.CpSolverSolutionCallback.__init__(self)
-        self.variables = variables.values()
+        
+        self.match_maker = match_maker
+        self.variables = match_maker.interview
+        
+        self.CHECK_MATCHES = True
+        self.CHECK_FREQUENCY = 5
+        self.STOP_ON_NO_CHANGE = True
+        
+        if self.CHECK_MATCHES:
+            self.match_checker = match_checker(match_maker.student_pref, match_maker.faculty_pref)
+            self.last_stud_percent = np.zeros((1, self.match_maker.NUM_PREFERENCES_2_CHECK))
+            self.last_faculty_percent = np.zeros((1, self.match_maker.NUM_PREFERENCES_2_CHECK))
+            
+        
         self.__solution_count = 0
-#        self.cost_matrix = cost_matrix
-        self.student_pref = student_pref
-        self.faculty_pref = faculty_pref
-        self.num_faculty = num_faculty
-        self.num_students = num_students
-        self.num_interviews = num_interviews
+
 
     def on_solution_callback(self):
         
         # Get sizes
-#        num_faculty = self.num_faculty
-#        num_students = self.num_students
-#        num_interviews = self.num_interviews
+        num_faculty = self.match_maker.num_faculty
+        num_students = self.match_maker.num_students
+        num_interviews = self.match_maker.NUM_INTERVIEWS
         
         # Print objective value
         print('Solution %i' % self.__solution_count)
         print('  objective value = %i' % self.ObjectiveValue())
         
-        values = []
-        for v in self.variables:
-            values.append(self.Value(v))
         
-        values = np.asarray(values)
-        values = np.reshape(values, (self.num_faculty, self.num_students, self.num_interviews))
-        
-        # Print number of matches made
-        
-        
+        # Determine what matches were made
+        if self.CHECK_MATCHES and (self.__solution_count % self.CHECK_FREQUENCY == 0):
+            
+            values = np.empty((num_students, num_faculty, num_interviews))
+            for p in range(num_faculty):
+                for s in range(num_students):
+                    for i in range(num_interviews):
+                        the_key = (p, s, i)
+                        the_variable = self.variables[the_key]
+                        values[s, p, i] = self.Value(the_variable)
+            
+            values = np.asarray(values)
+            
+            # Determine number of matches made for preferences
+            matches = np.sum(values, axis=2)
+            self.match_checker.check_matches(matches)
+#            stud_percent, faculty_percent = self.match_checker.check_matches(matches)
+#            
+#            diff_percent = np.concatenate((stud_percent, faculty_percent))
+#            last_diff_percent = np.concatenate((self.last_stud_percent, self.last_faculty_percent), axis=1)
+#            percent = (diff_percent - last_diff_percent)[0]
+#            self.last_stud_percent = stud_percent
+#            self.last_faculty_percent = faculty_percent
+#            
+#            print('Percent Difference: ')
+#            print(percent)
+#            
+#            if self.STOP_ON_NO_CHANGE:
+#                if np.all(percent == 0):
+#                    self.StopSearch()
         
         self.__solution_count += 1
-
-    def calc_cost(self):
-        pass
-        
-        
-
 
         
 
@@ -158,7 +226,9 @@ class match_maker():
         
         self.NUM_SUGGESTIONS = 2
         
-        self.MAX_SOLVER_TIME_SECONDS = 60
+        self.MAX_SOLVER_TIME_SECONDS = 180
+        
+        self.NUM_PREFERENCES_2_CHECK = 3
         
         # Avoid using - it's slow
         # This number should be chosen so that it is larger than lunch penalty
@@ -241,12 +311,12 @@ class match_maker():
         self.cost_matrix *= cost_sign
 
     ''' Track how many people got their preferences '''
-    def check_preferences(self):
+    def check_preferences(self, matches):
         
-        NUM_PREFERENCES_2_CHECK = 3
+        NUM_PREFERENCES_2_CHECK = self.NUM_PREFERENCES_2_CHECK
         
         # Students
-        student_pref = self.student_pref * self.matches
+        student_pref = self.student_pref * matches
         self.student_pref_cost = np.sum(student_pref, axis=1)
         total_preferences = np.empty((NUM_PREFERENCES_2_CHECK))
         preferences_met = np.empty((NUM_PREFERENCES_2_CHECK))
@@ -259,7 +329,7 @@ class match_maker():
         print(self.student_fraction_preferences_met)
         
         # Faculty
-        faculty_pref = self.faculty_pref * self.matches
+        faculty_pref = self.faculty_pref * matches
         self.faculty_pref_cost = np.sum(faculty_pref, axis=0)
         total_preferences = np.empty((NUM_PREFERENCES_2_CHECK))
         preferences_met = np.empty((NUM_PREFERENCES_2_CHECK))
@@ -743,12 +813,7 @@ class match_maker():
         # Creates the solver and solve.
         print('Building Model...', flush=True)
         solver = cp_model.CpSolver()
-        solution_printer = VarArrayAndObjectiveSolutionPrinter(self.interview,
-                                                               self.student_pref,
-                                                               self.faculty_pref,
-                                                               self.num_faculty,
-                                                               self.num_students,
-                                                               self.NUM_INTERVIEWS)
+        solution_printer = VarArrayAndObjectiveSolutionPrinter(self)
         
         print('Setting up workers...', flush=True)
         solver.parameters = sat_parameters_pb2.SatParameters(num_search_workers=8)
@@ -756,6 +821,7 @@ class match_maker():
         
         print('Solving model...', flush=True)
         status = solver.SolveWithSolutionCallback(model, solution_printer)   
+#        status = solver.Solve(model)
         
         print(solver.StatusName(status))
  
@@ -785,7 +851,7 @@ class match_maker():
                        fmt='%i')
             
             # Check the percentage of preferences met
-            self.check_preferences()
+            self.check_preferences(self.matches)
         
         else:
             print('-------- Solver failed! --------')
