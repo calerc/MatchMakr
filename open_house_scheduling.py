@@ -128,6 +128,10 @@ class match_maker():
         self.RAND_NUM_FACULTY = 31
         self.RAND_NUM_INTERVIEWS = 10
         
+        self.CHECK_MATCHES = True
+        self.CHECK_FREQUENCY = 20
+        self.STOP_ON_NO_CHANGE = True
+        
         # Avoid using - it's slow
         # This number should be chosen so that it is larger than lunch penalty
         self.EMPTY_PENALTY = 0  # 500 # This is a positive number, it will be made negative when used # Make zero to not use
@@ -1071,9 +1075,9 @@ class VarArrayAndObjectiveSolutionPrinter(cp_model.CpSolverSolutionCallback):
         self.match_maker = match_maker
         self.variables = match_maker.interview
         
-        self.CHECK_MATCHES = True
-        self.CHECK_FREQUENCY = 20
-        self.STOP_ON_NO_CHANGE = True
+        self.CHECK_MATCHES = self.match_maker.CHECK_MATCHES
+        self.CHECK_FREQUENCY = self.match_maker.CHECK_FREQUENCY
+        self.STOP_ON_NO_CHANGE = self.match_maker.STOP_ON_NO_CHANGE
         
         if self.CHECK_MATCHES:
             self.last_stud_percent = np.zeros((1, self.match_maker.NUM_PREFERENCES_2_CHECK))
