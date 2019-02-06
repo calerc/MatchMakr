@@ -41,6 +41,7 @@ from ortools.sat.python import cp_model
 
         Code clarity:
             ENSURE THAT THE DOCUMENTATION IS UP TO SNUFF
+            ORGANIZE CONSTANTS
 
         Code function:
             VALIDATE THAT EVERYTHING WORKS USING LAST YEAR'S MATCHES
@@ -51,6 +52,7 @@ from ortools.sat.python import cp_model
             ERROR-CHECK ANY INPUTS
             LET STUDENTS KNOW IF MATCH OR "RANDOM"
             PARALLELIZE THE MATCH CHECKER
+            FREEZE
 
         Code accessibility:
             CREATE GUI
@@ -66,19 +68,9 @@ class match_maker():
 
     def __init__(self):
 
-        # Constants
-        # This number hurts students, and it doesn't seem to affect faculty.
-        # Must be between 0-100
-        self.FACULTY_ADVANTAGE = 50
-        self.NUM_INTERVIEWS = 10
-
-        self.USE_NUM_INTERVIEWS = True
-        self.MIN_INTERVIEWS = 3
-        self.MAX_INTERVIEWS = 10
-
-        self.USE_EXTRA_SLOTS = True
-        self.NUM_EXTRA_SLOTS = 2
-
+        ''' Constants '''
+        
+        # Files to load
         self.PATH = "/home/cale/Desktop/open_house/fresh_start"
         self.STUDENT_PREF = "stud_pref_order.csv"
         self.FACULTY_PREF = "faculty_preferences.csv"
@@ -88,58 +80,92 @@ class match_maker():
         self.FACULTY_SIMILARITY_FILE_NAME = 'faculty_similarity.csv'
         self.IS_RECRUITING_FILE_NAME = 'faculty_is_recruiting.csv'
         self.LUNCH_FILE_NAME = 'faculty_work_lunch.csv'
-
-        self.student_names = []
-        self.faculty_names = []
-
-        self.USE_RANKING = True     # True if use preference order instead of binary
-        self.MAX_RANKING = 10
-        self.CHOICE_EXPONENT = 2
-
-        self.USE_WORK_LUNCH = True
-        # This is a positive number, it will be made negative when used
-        self.LUNCH_PENALTY = 10
-        self.LUNCH_PERIOD = 4
-
-        self.USE_RECRUITING = True
-        self.RECRUITING_WEIGHT = 10
-
-        self.USE_AVAILABILITY = False
-        self.AVAILABILITY_VALUE = -1 * sys.maxsize
         self.FACULTY_AVAILABILITY_NAME = 'faculty_availability.csv'
         self.STUDENT_AVAILABILITY_NAME = 'student_availability.csv'
-
+        
+        # Number of interviews
+        self.NUM_INTERVIEWS = 10
+        self.all_interviews = range(self.NUM_INTERVIEWS)
+        
+        self.USE_INTERVIEW_LIMITS = True
+        self.MIN_INTERVIEWS = 3             # Range [0, self.MAX_INTERVIEWS]
+        self.MAX_INTERVIEWS = 10            # Range [0, self.NUM_INTERVIEWS]
+        
+        
+        self.USE_EXTRA_SLOTS = True # Make reccomendations for matches not made
+        self.NUM_EXTRA_SLOTS = 2    # Number of reccomendations, range = [0, Inf), suggested = 2
+        
+        # Give the faculty an advantage over students range[0, 100], 50 = no advantage
+        self.FACULTY_ADVANTAGE = 50
+        
+        # Use ranked preferences instead of binary(want/don't want)
+        self.USE_RANKING = True     # True if use preference order instead of binary
+        self.MAX_RANKING = 10       # What value is given to the first name in a list of preferences
+        self.CHOICE_EXPONENT = 2    # What exponent should be used for ranks? If n, first choice is self.MAX_RANKING ^ n, and last choice is 1 ^ n
+        
+        # Penalize the need to work over lunch
+        self.USE_WORK_LUNCH = True
+        self.LUNCH_PENALTY = 10     # Range [0, Inf), suggested = 10
+        self.LUNCH_PERIOD = 4       # Range [0, self.NUM_INTERVIEWS]
+        
+        # Give recruiting faculty an advantage over non-recruiting faculty
+        self.USE_RECRUITING = True
+        self.RECRUITING_WEIGHT = 10     # Range [0, Inf), suggested = 10
+        
+        # If some people are not available for some (or all) interviews, use this
+        self.USE_AVAILABILITY = True
+        self.AVAILABILITY_VALUE = -1 * sys.maxsiz       # This parameter probably does not need tweeked
+        
+        # A track is a similarity between an interviewer and an interviewee
+        # These similarities are represented with integer groups
+        # Tracks do not affect well-requested interviews, but are useful for
+        # choosing interview matches that may be good, but that were not requested
         self.USE_TRACKS = True
         self.TRACK_WEIGHT = 1
-
+        
+        # When interviewers are similar to the interviewers that are "first choices"
+        # for the interviewees, they are given a boost in the objective function
+        # if the they were not chosen by the interviewee but the interviewee needs
+        # more interviews
         self.USE_FACULTY_SIMILARITY = True
-        self.FACULTY_SIMILARITY_WEIGHT = 2
-        self.NUM_SIMILAR_FACULTY = 5
-
+        self.FACULTY_SIMILARITY_WEIGHT = 2  # Range [0, Inf), suggested = 2
+        self.NUM_SIMILAR_FACULTY = 5        # Number of similar faculty objective scores to boost, range [0, self.num_faculty), suggested = 5
+        
+        # When a solution is found, we will print out how many people got their
+        # first, second, ..., n^th choices.  This parameter is n
+        self.NUM_PREFERENCES_2_CHECK = 3    # Range [0, self.NUM_INTERVIEWS), suggested = 3
+        
+        # After all matches have been made, suggest interesting people to talk with
+        # During free time.  This is the number of suggestions to make
         self.NUM_SUGGESTIONS = 2
 
+        # While matches are being made, choose how many times to check the first
+        # self.NUM_PREFERENCES_2_CHECK choices.
+        self.CHECK_MATCHES = True
+        self.CHECK_FREQUENCY = 20       # range [0, inf), suggested = 20 (when > 20, it can be slow)
+
+        # Number of seconds to allow the match maker to run
         self.MAX_SOLVER_TIME_SECONDS = 20
-
-        self.NUM_PREFERENCES_2_CHECK = 3
-
+        
+        # Choose if we want to print preference data to worksheets
+        self.DEBUG_PRINT_PREFERENCE = False
+        
+        # For testing purposes, we may choose to generate fake data.  These parameters
+        # affect how many data points are generated
         self.RAND_NUM_STUDENTS = 70
         self.RAND_NUM_FACULTY = 31
         self.RAND_NUM_INTERVIEWS = 10
+        
+        # Initialize empty variables for use later
+        self.student_names = []
+        self.faculty_names = []
 
-        self.CHECK_MATCHES = True
-        self.CHECK_FREQUENCY = 20
-        self.STOP_ON_NO_CHANGE = True
-
-        # Avoid using - it's slow
+        
+        # Penalize having empty interview slots
         # This number should be chosen so that it is larger than lunch penalty
-        # 500 # This is a positive number, it will be made negative when used #
-        # Make zero to not use
-        self.EMPTY_PENALTY = 0
-
-        self.DEBUG_PRINT_PREFERENCE = False
-
-        # Calculated parameters
-        self.all_interviews = range(self.NUM_INTERVIEWS)
+        # Avoid using - it's slow
+        # Set to zero to not use
+        self.EMPTY_PENALTY = 0 # Range [0, Inf), suggested = 0, suggested to turn on > self.LUNCH_PENALTY ^ 2 (about 500 if using all default parameters)
 
         # Check parameter validity
         if (self.FACULTY_ADVANTAGE < 0 or self.FACULTY_ADVANTAGE > 100):
@@ -779,7 +805,7 @@ class match_maker():
                 model.Add(sum(self.interview[(p, s, i)]
                               for i in self.all_interviews) <= 1)
 
-        if self.USE_NUM_INTERVIEWS:
+        if self.USE_INTERVIEW_LIMITS:
 
             # Ensure that no student gets too many or too few interviews
             for s in self.all_students:
@@ -1101,7 +1127,6 @@ class VarArrayAndObjectiveSolutionPrinter(cp_model.CpSolverSolutionCallback):
 
         self.CHECK_MATCHES = self.match_maker.CHECK_MATCHES
         self.CHECK_FREQUENCY = self.match_maker.CHECK_FREQUENCY
-        self.STOP_ON_NO_CHANGE = self.match_maker.STOP_ON_NO_CHANGE
 
         if self.CHECK_MATCHES:
             self.last_stud_percent = np.zeros(
