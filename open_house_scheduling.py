@@ -171,15 +171,6 @@ class match_maker():
         # Check parameter validity
         
         input_checker(self)
-#        if (self.FACULTY_ADVANTAGE < 0 or self.FACULTY_ADVANTAGE > 100):
-#            raise ValueError(
-#                'It is necessary that: 0 <= Faculty_Advantage <= 100')
-#
-#        if (not isinstance(self.FACULTY_ADVANTAGE, int)):
-#            int_faculty_advantage = int(self.FACULTY_ADVANTAGE)
-#            self.FACULTY_ADVANTAGE = int_faculty_advantage
-#            warnings.warn(
-#                'Faculty Advantage must be an integer, rounding to the nearest integer')
 
     '''
         Add names if we discover them when loading new data
