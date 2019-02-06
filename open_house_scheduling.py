@@ -8,6 +8,7 @@ import numpy as np
 from os import path, makedirs
 import csv
 from ortools.sat.python import cp_model
+import inspect
 
 
 '''
@@ -84,7 +85,7 @@ class match_maker():
         self.STUDENT_AVAILABILITY_NAME = 'student_availability.csv'
         
         # Number of interviews
-        self.NUM_INTERVIEWS = 10
+        self.NUM_INTERVIEWS = 10            # Range [0, Inf) suggested = 10
         self.all_interviews = range(self.NUM_INTERVIEWS)
         
         self.USE_INTERVIEW_LIMITS = True
@@ -96,7 +97,7 @@ class match_maker():
         self.NUM_EXTRA_SLOTS = 2    # Number of reccomendations, range = [0, Inf), suggested = 2
         
         # Give the faculty an advantage over students range[0, 100], 50 = no advantage
-        self.FACULTY_ADVANTAGE = 50
+        self.FACULTY_ADVANTAGE = 50     # Range [0, Inf), suggested = 50
         
         # Use ranked preferences instead of binary(want/don't want)
         self.USE_RANKING = True     # True if use preference order instead of binary
@@ -114,14 +115,14 @@ class match_maker():
         
         # If some people are not available for some (or all) interviews, use this
         self.USE_AVAILABILITY = True
-        self.AVAILABILITY_VALUE = -1 * sys.maxsiz       # This parameter probably does not need tweeked
+        self.AVAILABILITY_VALUE = -1 * sys.maxsize       # This parameter probably does not need tweeked
         
         # A track is a similarity between an interviewer and an interviewee
         # These similarities are represented with integer groups
         # Tracks do not affect well-requested interviews, but are useful for
         # choosing interview matches that may be good, but that were not requested
         self.USE_TRACKS = True
-        self.TRACK_WEIGHT = 1
+        self.TRACK_WEIGHT = 1           # Range [0, Inf), suggested = 1
         
         # When interviewers are similar to the interviewers that are "first choices"
         # for the interviewees, they are given a boost in the objective function
@@ -137,7 +138,7 @@ class match_maker():
         
         # After all matches have been made, suggest interesting people to talk with
         # During free time.  This is the number of suggestions to make
-        self.NUM_SUGGESTIONS = 2
+        self.NUM_SUGGESTIONS = 2        # Range [0, self.num_faculty), suggested = 2
 
         # While matches are being made, choose how many times to check the first
         # self.NUM_PREFERENCES_2_CHECK choices.
@@ -152,9 +153,9 @@ class match_maker():
         
         # For testing purposes, we may choose to generate fake data.  These parameters
         # affect how many data points are generated
-        self.RAND_NUM_STUDENTS = 70
-        self.RAND_NUM_FACULTY = 31
-        self.RAND_NUM_INTERVIEWS = 10
+        self.RAND_NUM_STUDENTS = 70         # Range [0, Inf), suggested = 50
+        self.RAND_NUM_FACULTY = 31          # Range [0, Inf), suggested = 35
+        self.RAND_NUM_INTERVIEWS = 10       # Range [0, Inf), suggested = 10
         
         # Initialize empty variables for use later
         self.student_names = []
@@ -168,15 +169,17 @@ class match_maker():
         self.EMPTY_PENALTY = 0 # Range [0, Inf), suggested = 0, suggested to turn on > self.LUNCH_PENALTY ^ 2 (about 500 if using all default parameters)
 
         # Check parameter validity
-        if (self.FACULTY_ADVANTAGE < 0 or self.FACULTY_ADVANTAGE > 100):
-            raise ValueError(
-                'It is necessary that: 0 <= Faculty_Advantage <= 100')
-
-        if (not isinstance(self.FACULTY_ADVANTAGE, int)):
-            int_faculty_advantage = int(self.FACULTY_ADVANTAGE)
-            self.FACULTY_ADVANTAGE = int_faculty_advantage
-            warnings.warn(
-                'Faculty Advantage must be an integer, rounding to the nearest integer')
+        
+        input_checker(self)
+#        if (self.FACULTY_ADVANTAGE < 0 or self.FACULTY_ADVANTAGE > 100):
+#            raise ValueError(
+#                'It is necessary that: 0 <= Faculty_Advantage <= 100')
+#
+#        if (not isinstance(self.FACULTY_ADVANTAGE, int)):
+#            int_faculty_advantage = int(self.FACULTY_ADVANTAGE)
+#            self.FACULTY_ADVANTAGE = int_faculty_advantage
+#            warnings.warn(
+#                'Faculty Advantage must be an integer, rounding to the nearest integer')
 
     '''
         Add names if we discover them when loading new data
@@ -1170,6 +1173,156 @@ class VarArrayAndObjectiveSolutionPrinter(cp_model.CpSolverSolutionCallback):
 
     def solution_count(self):
         return self.__solution_count
+    
+
+class input_checker:
+    
+    def __init__(self, match_maker):
+        self.mm = match_maker
+        
+        self.main()
+        
+    def check_bool(self, parameter):
+        return type(parameter) == bool
+    
+    def check_file_exists(self, file_name):
+        if type(file_name) != str:
+            return False
+                
+        full_path = path.join(self.mm.PATH, file_name)
+        return path.isfile(full_path)
+        
+    def check_positive_int(self, parameter):
+        if type(parameter) == int:
+            return parameter >= 0
+        return False
+    
+    def check_range_int(self, parameter, lower_bound, upper_bound):
+        if type(parameter) == int:
+            return (parameter >= lower_bound and parameter < upper_bound)
+        return False
+        
+        
+    def main(self):
+        
+        # Check that files exist
+        file_names = [self.mm.STUDENT_PREF, self.mm.FACULTY_PREF, self.mm.TIMES_NAME,
+                      self.mm.FACULTY_TRACK_FILE_NAME, self.mm.STUDENT_TRACK_FILE_NAME,
+                      self.mm.FACULTY_SIMILARITY_FILE_NAME, self.mm.IS_RECRUITING_FILE_NAME,
+                      self.mm.LUNCH_FILE_NAME, self.mm.FACULTY_AVAILABILITY_NAME,
+                      self.mm.STUDENT_AVAILABILITY_NAME]
+        
+        for file in file_names:        
+            if not self.check_file_exists(file):
+                raise ValueError(file + ' is not on the path ' + self.PATH)
+                
+        # Check bools
+        if not self.check_bool(self.mm.USE_INTERVIEW_LIMITS):
+            raise ValueError('USE_INTERVIEW_LIMITS' + ' should be a bool')
+        
+        if not self.check_bool(self.mm.USE_EXTRA_SLOTS):
+            raise ValueError('USE_EXTRA_SLOTS' + ' should be a bool')
+            
+        if not self.check_bool(self.mm.USE_RANKING):
+            raise ValueError('USE_RANKING' + ' should be a bool')
+            
+        if not self.check_bool(self.mm.USE_WORK_LUNCH):
+            raise ValueError('USE_WORK_LUNCH' + ' should be a bool')
+            
+        if not self.check_bool(self.mm.USE_RECRUITING):
+            raise ValueError('USE_RECRUITING' + ' should be a bool')
+        
+        if not self.check_bool(self.mm.USE_AVAILABILITY):
+            raise ValueError('USE_AVAILABILITY' + ' should be a bool')
+            
+        if not self.check_bool(self.mm.USE_FACULTY_SIMILARITY):
+            raise ValueError('USE_FACULTY_SIMILARITY' + ' should be a bool')
+            
+        if not self.check_bool(self.mm.CHECK_MATCHES):
+            raise ValueError('CHECK_MATCHES' + ' should be a bool')
+            
+        if not self.check_bool(self.mm.DEBUG_PRINT_PREFERENCE):
+            raise ValueError('DEBUG_PRINT_PREFERENCE' + ' should be a bool')
+            
+        # Check positive ints
+        if not self.check_positive_int(self.mm.NUM_INTERVIEWS):
+            raise ValueError('NUM_INTERVIEWS' + ' should be a non-negative integer')
+
+        if not self.check_positive_int(self.mm.MIN_INTERVIEWS):
+            raise ValueError('MIN_INTERVIEWS' + ' should be a non-negative integer')
+        
+        if not self.check_positive_int(self.mm.MAX_INTERVIEWS):
+            raise ValueError('MAX_INTERVIEWS' + ' should be a non-negative integer')
+        
+        if not self.check_positive_int(self.mm.NUM_EXTRA_SLOTS):
+            raise ValueError('NUM_EXTRA_SLOTS' + ' should be a non-negative integer')
+            
+        if not self.check_positive_int(self.mm.MAX_RANKING):
+            raise ValueError('MAX_RANKING' + ' should be a non-negative integer')
+            
+        if not self.check_positive_int(self.mm.CHOICE_EXPONENT):
+            raise ValueError('CHOICE_EXPONENT' + ' should be a non-negative integer')
+            
+        if not self.check_positive_int(self.mm.LUNCH_PENALTY):
+            raise ValueError('LUNCH_PENALTY' + ' should be a non-negative integer')
+            
+        if not self.check_positive_int(self.mm.RECRUITING_WEIGHT):
+            raise ValueError('RECRUITING_WEIGHT' + ' should be a non-negative integer')
+
+        if not self.check_positive_int(self.mm.TRACK_WEIGHT):
+            raise ValueError('TRACK_WEIGHT' + ' should be a non-negative integer')
+            
+        if not self.check_positive_int(self.mm.FACULTY_SIMILARITY_WEIGHT):
+            raise ValueError('FACULTY_SIMILARITY_WEIGHT' + ' should be a non-negative integer')
+            
+        if not self.check_positive_int(self.mm.NUM_SUGGESTIONS):
+            raise ValueError('NUM_SUGGESTIONS' + ' should be a non-negative integer')
+            
+        if not self.check_positive_int(self.mm.CHECK_FREQUENCY):
+            raise ValueError('CHECK_FREQUENCY' + ' should be a non-negative integer')
+            
+        if not self.check_positive_int(self.mm.MAX_SOLVER_TIME_SECONDS):
+            raise ValueError('MAX_SOLVER_TIME_SECONDS' + ' should be a non-negative integer')
+        
+        if not self.check_positive_int(self.mm.RAND_NUM_STUDENTS):
+            raise ValueError('RAND_NUM_STUDENTS' + ' should be a non-negative integer')
+        
+        if not self.check_positive_int(self.mm.RAND_NUM_FACULTY):
+            raise ValueError('RAND_NUM_FACULTY' + ' should be a non-negative integer')
+            
+        if not self.check_positive_int(self.mm.RAND_NUM_INTERVIEWS):
+            raise ValueError('RAND_NUM_INTERVIEWS' + ' should be a non-negative integer')
+            
+        if not self.check_positive_int(self.mm.EMPTY_PENALTY):
+            raise ValueError('EMPTY_PENALTY' + ' should be a non-negative integer')
+
+            
+        # Check ranged ints
+        if not self.check_range_int(self.mm.FACULTY_ADVANTAGE, 0, 100):
+            raise ValueError('FACULTY_ADVANTAGE' + ' should be an integer between '
+                             + '0' + ' and ' + '100')
+            
+        if not self.check_range_int(self.mm.LUNCH_PERIOD, 0, self.mm.NUM_INTERVIEWS):
+            raise ValueError('LUNCH_PERIOD' + ' should be an integer between '
+                             + '0' + ' and ' + 'NUM_INTERVIEWS')
+        
+        if not self.check_range_int(self.mm.NUM_PREFERENCES_2_CHECK, 0, self.mm.NUM_INTERVIEWS):
+            raise ValueError('NUM_PREFERENCES_2_CHECK' + ' should be an integer between '
+                             + '0' + ' and ' + 'NUM_INTERVIEWS')
+            
+        # Check other parameters
+        if self.mm.AVAILABILITY_VALUE != -1 * sys.maxsize:
+            warnings.warn('We detected that AVAILABILITY_VALUE does not equal -1 * sys.maxsize.  This can cause issues.')
+            
+
+
+
+
+
+
+
+
+
 
 
 if __name__ == '__main__':
