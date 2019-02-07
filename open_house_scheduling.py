@@ -49,7 +49,6 @@ from ortools.sat.python import cp_model
                 But, we might be able to shuffle
             CREATE GOOGLE SURVEYS
             ENSURE THAT PARAMETERS DON'T INTERFERE WITH EACH OTHER
-            PARALLELIZE THE MATCH CHECKER
             FREEZE
 
         Code accessibility:
@@ -57,6 +56,10 @@ from ortools.sat.python import cp_model
             CREATE PUBLIC GITHUB
             FIND SOMEWHERE TO HOST BINARIES
             VIDEO TO YOUTUBE
+            
+            
+    KNOWN BUGS:
+        Sometimes, the same person is suggested more than once
 '''
 
 
@@ -112,7 +115,7 @@ class match_maker():
         
         # If some people are not available for some (or all) interviews, use this
         self.USE_AVAILABILITY = True
-        self.AVAILABILITY_VALUE = -1 * sys.maxsize       # This parameter probably does not need tweeked
+        self.AVAILABILITY_VALUE = -1 * 5000 # This parameter probably does not need tweeked
         
         # A track is a similarity between an interviewer and an interviewee
         # These similarities are represented with integer groups
@@ -807,17 +810,51 @@ class match_maker():
             for s in self.all_students:
                 num_interviews_stud = sum(self.interview[(
                     p, s, i)] for p in self.all_faculty for i in self.all_interviews)
+                
+                # Set minimum number of interviews
                 if not self.USE_AVAILABILITY:
                     model.Add(self.MIN_INTERVIEWS <= num_interviews_stud)
+                else:
+                    
+                    num_slots_unavailable = sum(self.student_availability[:, s] == 0)
+                    
+                    # If the person is available for more than half the interview
+                    # try not to penalize them for being unavailable.  Otherwise,
+                    # let them be penalized
+                    if num_slots_unavailable <= 0.5 * self.NUM_INTERVIEWS:
+                        model.Add(self.MIN_INTERVIEWS <= num_interviews_stud)
+                    elif num_slots_unavailable != self.NUM_INTERVIEWS:
+                        model.Add(self.MIN_INTERVIEWS - num_slots_unavailable
+                                  <= num_interviews_stud)
+                    # else:
+                    #   we don't let them have interviews if they aren't available
+                    
+                # Set maximum number of interviews
                 model.Add(num_interviews_stud <= self.MAX_INTERVIEWS)
 
             # Ensure that no professor gets too many or too few interviews
             for p in self.all_faculty:
                 num_interviews_prof = sum(self.interview[(
                     p, s, i)] for s in self.all_students for i in self.all_interviews)
-
+                    
+                # If the person is available for more than half the interview
+                # try not to penalize them for being unavailable.  Otherwise,
+                # let them be penalized
                 if not self.USE_AVAILABILITY:
                     model.Add(self.MIN_INTERVIEWS <= num_interviews_prof)
+                else:
+                    
+                    num_slots_unavailable = sum(self.faculty_availability[:, p] == 0)
+                    
+                    if num_slots_unavailable <= 0.5 * self.NUM_INTERVIEWS:
+                        model.Add(self.MIN_INTERVIEWS <= num_interviews_prof)
+                    elif num_slots_unavailable != self.NUM_INTERVIEWS:
+                        model.Add(self.MIN_INTERVIEWS - num_slots_unavailable
+                                  <= num_interviews_prof)
+                    # else:
+                    #   we don't let them have interviews if they aren't available
+                    
+                # Set maximum number of interviews
                 model.Add(num_interviews_prof <= self.MAX_INTERVIEWS)
 
         # Define the maximization of the objective
@@ -1046,7 +1083,10 @@ class match_maker():
                         if obj == 0:
                             obj = 1
                         else:
-                            obj = int(np.log10(obj))
+                            try:
+                                obj = int(np.log10(obj))
+                            except:
+                                warnings.warn('NaN problem for ' + name)
                                 
                         if obj < 1:
                             obj = 1
@@ -1056,9 +1096,9 @@ class match_maker():
                                 match_string = 'Free'
                             else:
                                 match_string = 'Informational Interview' 
-                        elif obj == 2 or obj == 3:
+                        elif obj >= 2 and obj < 4:
                             match_string = 'Moderate Match'
-                        elif obj > 3:
+                        elif obj >= 4:
                             match_string = 'Strong Match' 
                         
 
@@ -1150,6 +1190,10 @@ class match_maker():
         return out_array
 
 
+'''
+    VarArrayAndObjectiveSolutionPrinter
+    callback printer object for ortools solver
+'''
 class VarArrayAndObjectiveSolutionPrinter(cp_model.CpSolverSolutionCallback):
 
     ''' Print intermediate solutions. '''
@@ -1207,7 +1251,13 @@ class VarArrayAndObjectiveSolutionPrinter(cp_model.CpSolverSolutionCallback):
     def solution_count(self):
         return self.__solution_count
     
-
+    
+'''
+    input_checker
+    Checks input to the match_maker class to make sure they are reasonable
+    Call input_checker(match_maker) as the last line of match_maker.__init__
+    If no errors result, the match_maker program can continue
+'''
 class input_checker:
     
     def __init__(self, match_maker):
@@ -1346,8 +1396,8 @@ class input_checker:
                              + '0' + ' and ' + 'NUM_INTERVIEWS')
             
         # Check other parameters
-        if self.mm.AVAILABILITY_VALUE != -1 * sys.maxsize:
-            warnings.warn('We detected that AVAILABILITY_VALUE does not equal -1 * sys.maxsize.  This can cause issues.')
+        if self.mm.AVAILABILITY_VALUE != -1 * 5000:
+            warnings.warn('We detected that AVAILABILITY_VALUE does not equal -1 * 5000.  This can cause issues.')
             
 
 
