@@ -53,8 +53,8 @@ from ortools.sat.python import cp_model
                 Determine license type and copyright
             FIND SOMEWHERE TO HOST BINARIES
             VIDEO TO YOUTUBE
-            
-            
+
+
     KNOWN BUGS:
         Sometimes, the same person is suggested more than once
 '''
@@ -65,9 +65,8 @@ class match_maker():
     ''' Define parameters needed for scheduling '''
 
     def __init__(self):
-
         ''' Constants '''
-        
+
         # Files to load
         self.PATH = "/home/cale/Desktop/open_house/fresh_start"
         self.STUDENT_PREF = "stud_pref_order.csv"
@@ -80,102 +79,116 @@ class match_maker():
         self.LUNCH_FILE_NAME = 'faculty_work_lunch.csv'
         self.FACULTY_AVAILABILITY_NAME = 'faculty_availability.csv'
         self.STUDENT_AVAILABILITY_NAME = 'student_availability.csv'
-        
+
         # Number of interviews
         self.NUM_INTERVIEWS = 10            # Range [0, Inf) suggested = 10
         self.all_interviews = range(self.NUM_INTERVIEWS)
-        
+
         self.USE_INTERVIEW_LIMITS = True
         self.MIN_INTERVIEWS = 3             # Range [0, self.MAX_INTERVIEWS]
         self.MAX_INTERVIEWS = 10            # Range [0, self.NUM_INTERVIEWS]
-        
-        
-        self.USE_EXTRA_SLOTS = True # Make reccomendations for matches not made
-        self.NUM_EXTRA_SLOTS = 2    # Number of reccomendations, range = [0, Inf), suggested = 2
-        
-        # Give the faculty an advantage over students range[0, 100], 50 = no advantage
+
+        self.USE_EXTRA_SLOTS = True  # Make reccomendations for matches not made
+        # Number of reccomendations, range = [0, Inf), suggested = 2
+        self.NUM_EXTRA_SLOTS = 2
+
+        # Give the faculty an advantage over students range[0, 100], 50 = no
+        # advantage
         self.FACULTY_ADVANTAGE = 50     # Range [0, Inf), suggested = 50
-        
+
         # Use ranked preferences instead of binary(want/don't want)
         self.USE_RANKING = True     # True if use preference order instead of binary
-        self.MAX_RANKING = 10       # What value is given to the first name in a list of preferences
-        self.CHOICE_EXPONENT = 2    # What exponent should be used for ranks? If n, first choice is self.MAX_RANKING ^ n, and last choice is 1 ^ n
-        
+        # What value is given to the first name in a list of preferences
+        self.MAX_RANKING = 10
+        # What exponent should be used for ranks? If n, first choice is
+        # self.MAX_RANKING ^ n, and last choice is 1 ^ n
+        self.CHOICE_EXPONENT = 2
+
         # Penalize the need to work over lunch
         self.USE_WORK_LUNCH = True
         self.LUNCH_PENALTY = 10     # Range [0, Inf), suggested = 10
         self.LUNCH_PERIOD = 4       # Range [0, self.NUM_INTERVIEWS]
-        
+
         # Give recruiting faculty an advantage over non-recruiting faculty
         self.USE_RECRUITING = True
         self.RECRUITING_WEIGHT = 10     # Range [0, Inf), suggested = 10
-        
-        # If some people are not available for some (or all) interviews, use this
+
+        # If some people are not available for some (or all) interviews, use
+        # this
         self.USE_AVAILABILITY = True
-        self.AVAILABILITY_VALUE = -1 * 5000 # This parameter probably does not need tweeked
-        
+        # This parameter probably does not need tweeked
+        self.AVAILABILITY_VALUE = -1 * 5000
+
         # A track is a similarity between an interviewer and an interviewee
         # These similarities are represented with integer groups
         # Tracks do not affect well-requested interviews, but are useful for
-        # choosing interview matches that may be good, but that were not requested
+        # choosing interview matches that may be good, but that were not
+        # requested
         self.USE_TRACKS = True
         self.TRACK_WEIGHT = 1           # Range [0, Inf), suggested = 1
-        
+
         # When interviewers are similar to the interviewers that are "first choices"
         # for the interviewees, they are given a boost in the objective function
         # if the they were not chosen by the interviewee but the interviewee needs
         # more interviews
         self.USE_FACULTY_SIMILARITY = True
         self.FACULTY_SIMILARITY_WEIGHT = 2  # Range [0, Inf), suggested = 2
-        self.NUM_SIMILAR_FACULTY = 5        # Number of similar faculty objective scores to boost, range [0, self.num_faculty), suggested = 5
-        
+        # Number of similar faculty objective scores to boost, range [0,
+        # self.num_faculty), suggested = 5
+        self.NUM_SIMILAR_FACULTY = 5
+
         # When a solution is found, we will print out how many people got their
         # first, second, ..., n^th choices.  This parameter is n
-        self.NUM_PREFERENCES_2_CHECK = 3    # Range [0, self.NUM_INTERVIEWS), suggested = 3
-        
+        # Range [0, self.NUM_INTERVIEWS), suggested = 3
+        self.NUM_PREFERENCES_2_CHECK = 3
+
         # After all matches have been made, suggest interesting people to talk with
         # During free time.  This is the number of suggestions to make
-        self.NUM_SUGGESTIONS = 2        # Range [0, self.num_faculty), suggested = 2
+        # Range [0, self.num_faculty), suggested = 2
+        self.NUM_SUGGESTIONS = 2
 
         # While matches are being made, choose how many times to check the first
         # self.NUM_PREFERENCES_2_CHECK choices.
         self.CHECK_MATCHES = True
-        self.CHECK_FREQUENCY = 20       # range [0, inf), suggested = 20 (when > 20, it can be slow)
+        # range [0, inf), suggested = 20 (when > 20, it can be slow)
+        self.CHECK_FREQUENCY = 20
 
         # Number of seconds to allow the match maker to run
         self.MAX_SOLVER_TIME_SECONDS = 180   # range [0, inf), suggested = 190
-        
+
         # Choose if we want to print preference data to worksheets
         self.PRINT_PREFERENCE = True
-        
+
         # For testing purposes, we may choose to generate fake data.  These parameters
         # affect how many data points are generated
         self.RAND_NUM_STUDENTS = 70         # Range [0, Inf), suggested = 50
         self.RAND_NUM_FACULTY = 31          # Range [0, Inf), suggested = 35
         self.RAND_NUM_INTERVIEWS = 10       # Range [0, Inf), suggested = 10
-        
+
         # For testing purposes, we may choose to randomize the preference order
         # in order to ensure that the optimizer doesn't favor any students
         self.RANDOMIZE_PREFERENCES = False
-        
+
         # Initialize empty variables for use later
         self.student_names = []
         self.faculty_names = []
-        
-        # Set the column width (# characters) for printing names to the schedules
+
+        # Set the column width (# characters) for printing names to the
+        # schedules
         self.COLUMN_WIDTH = 22
-        
+
         # An arbitrary small constant to help with numerical stability
         self.A_SMALL_CONSTANT = 1E-10
-        
+
         # Penalize having empty interview slots
         # This number should be chosen so that it is larger than lunch penalty
         # Avoid using - it's slow
         # Set to zero to not use
-        self.EMPTY_PENALTY = 0 # Range [0, Inf), suggested = 0, suggested to turn on > self.LUNCH_PENALTY ^ 2 (about 500 if using all default parameters)
-        
-        
-        # Check parameter validity        
+        # Range [0, Inf), suggested = 0, suggested to turn on >
+        # self.LUNCH_PENALTY ^ 2 (about 500 if using all default parameters)
+        self.EMPTY_PENALTY = 0
+
+        # Check parameter validity
         input_checker(self)
 
     '''
@@ -274,7 +287,8 @@ class match_maker():
         self.student_pref_objective = np.sum(student_pref, axis=1)
         total_preferences = np.empty((self.NUM_PREFERENCES_2_CHECK))
         preferences_met = np.empty((self.NUM_PREFERENCES_2_CHECK))
-        self.stud_pref_met = np.empty((self.NUM_PREFERENCES_2_CHECK)).astype(object)
+        self.stud_pref_met = np.empty(
+            (self.NUM_PREFERENCES_2_CHECK)).astype(object)
         for pref_num in range(self.NUM_PREFERENCES_2_CHECK):
             total_preferences[pref_num] = np.sum(
                 self.student_pref == (self.MAX_RANKING - pref_num))
@@ -290,11 +304,13 @@ class match_maker():
         self.faculty_pref_objective = np.sum(faculty_pref, axis=0)
         total_preferences = np.empty((self.NUM_PREFERENCES_2_CHECK))
         preferences_met = np.empty((self.NUM_PREFERENCES_2_CHECK))
-        self.faculty_pref_met = np.empty((self.NUM_PREFERENCES_2_CHECK)).astype(object)
+        self.faculty_pref_met = np.empty(
+            (self.NUM_PREFERENCES_2_CHECK)).astype(object)
         for pref_num in range(self.NUM_PREFERENCES_2_CHECK):
             total_preferences[pref_num] = np.sum(
                 self.faculty_pref == (self.MAX_RANKING - pref_num))
-            self.faculty_pref_met = faculty_pref == (self.MAX_RANKING - pref_num)
+            self.faculty_pref_met = faculty_pref == (
+                self.MAX_RANKING - pref_num)
             preferences_met[pref_num] = np.sum(self.faculty_pref_met)
 
         self.faculty_fraction_preferences_met = preferences_met / total_preferences
@@ -689,8 +705,8 @@ class match_maker():
         # Extract the preferences
         student_pref = stud_match_data[3:, 1:]
         faculty_pref = faculty_match_data[3:, 1:]
-        
-        # Randomize preferences, if necessary        
+
+        # Randomize preferences, if necessary
         if self.RANDOMIZE_PREFERENCES:
             stud_match_data = self.randomize_preferences(stud_match_data)
             faculty_match_data = self.randomize_preferences(faculty_match_data)
@@ -820,14 +836,15 @@ class match_maker():
             for s in self.all_students:
                 num_interviews_stud = sum(self.interview[(
                     p, s, i)] for p in self.all_faculty for i in self.all_interviews)
-                
+
                 # Set minimum number of interviews
                 if not self.USE_AVAILABILITY:
                     model.Add(self.MIN_INTERVIEWS <= num_interviews_stud)
                 else:
-                    
-                    num_slots_unavailable = sum(self.student_availability[:, s] == 0)
-                    
+
+                    num_slots_unavailable = sum(
+                        self.student_availability[:, s] == 0)
+
                     # If the person is available for more than half the interview
                     # try not to penalize them for being unavailable.  Otherwise,
                     # let them be penalized
@@ -837,8 +854,9 @@ class match_maker():
                         model.Add(self.MIN_INTERVIEWS - num_slots_unavailable
                                   <= num_interviews_stud)
                     # else:
-                    #   we don't let them have interviews if they aren't available
-                    
+                    # we don't let them have interviews if they aren't
+                    # available
+
                 # Set maximum number of interviews
                 model.Add(num_interviews_stud <= self.MAX_INTERVIEWS)
 
@@ -846,24 +864,26 @@ class match_maker():
             for p in self.all_faculty:
                 num_interviews_prof = sum(self.interview[(
                     p, s, i)] for s in self.all_students for i in self.all_interviews)
-                    
+
                 # If the person is available for more than half the interview
                 # try not to penalize them for being unavailable.  Otherwise,
                 # let them be penalized
                 if not self.USE_AVAILABILITY:
                     model.Add(self.MIN_INTERVIEWS <= num_interviews_prof)
                 else:
-                    
-                    num_slots_unavailable = sum(self.faculty_availability[:, p] == 0)
-                    
+
+                    num_slots_unavailable = sum(
+                        self.faculty_availability[:, p] == 0)
+
                     if num_slots_unavailable <= 0.5 * self.NUM_INTERVIEWS:
                         model.Add(self.MIN_INTERVIEWS <= num_interviews_prof)
                     elif num_slots_unavailable != self.NUM_INTERVIEWS:
                         model.Add(self.MIN_INTERVIEWS - num_slots_unavailable
                                   <= num_interviews_prof)
                     # else:
-                    #   we don't let them have interviews if they aren't available
-                    
+                    # we don't let them have interviews if they aren't
+                    # available
+
                 # Set maximum number of interviews
                 model.Add(num_interviews_prof <= self.MAX_INTERVIEWS)
 
@@ -1079,41 +1099,42 @@ class match_maker():
                         else:
                             sep_char = '-'
                             sep_string = ' --------- '
-                            
-                        num_spaces_needed = self.COLUMN_WIDTH - len(schedule[count, i])
+
+                        num_spaces_needed = self.COLUMN_WIDTH - \
+                            len(schedule[count, i])
                         if num_spaces_needed > 0:
                             space_string = ' ' + sep_char * num_spaces_needed + ' '
                         else:
                             space_string = ' ' + ' '
-                        
+
                         # Change the objective value to something easier to understand
-                        # Also, make it strictly positive so that it looks like there is "always a benefit"
+                        # Also, make it strictly positive so that it looks like
+                        # there is "always a benefit"
                         obj = objective[count][i]
-                        
+
                         if obj < 1:
                             obj = 1
                         else:
                             try:
                                 obj = int(np.log10(obj))
-                            except:
+                            except BaseException:
                                 warnings.warn('NaN problem for '
                                               + name + ', obj = '
                                               + str(obj))
                                 obj = 1
-                                
+
                         if obj < 1:
                             obj = 1
-                            
+
                         if obj == 1:
                             if schedule[count, i] == 'Free':
                                 match_string = 'Free'
                             else:
-                                match_string = 'Informational Interview' 
+                                match_string = 'Informational Interview'
                         elif obj >= 2 and obj < 4:
                             match_string = 'Moderate Match'
                         elif obj >= 4:
-                            match_string = 'Strong Match' 
-                        
+                            match_string = 'Strong Match'
 
                         file.writelines(np.array_str(times[i]) + sep_string
                                         + schedule[count, i] + space_string
@@ -1145,19 +1166,19 @@ class match_maker():
 
                 file.writelines('\n')
                 file.writelines('\n')
-                
+
     '''
         Randomize preferences for debuggning purposes
     '''
+
     def randomize_preferences(self, pref_array):
         num_matches, num_people = np.shape(pref_array)
         possible_matches = np.arange(num_matches)
-        
+
         for person in range(num_people):
             rand_permute = np.random.choice(
-                        possible_matches, size=num_matches)
+                possible_matches, size=num_matches)
             pref_array[:, person] = pref_array[rand_permute, person]
-                
 
     '''
         Remove students and faculty that are unavailable
@@ -1220,6 +1241,8 @@ class match_maker():
     VarArrayAndObjectiveSolutionPrinter
     callback printer object for ortools solver
 '''
+
+
 class VarArrayAndObjectiveSolutionPrinter(cp_model.CpSolverSolutionCallback):
 
     ''' Print intermediate solutions. '''
@@ -1276,164 +1299,212 @@ class VarArrayAndObjectiveSolutionPrinter(cp_model.CpSolverSolutionCallback):
 
     def solution_count(self):
         return self.__solution_count
-    
-    
+
+
 '''
     input_checker
     Checks input to the match_maker class to make sure they are reasonable
     Call input_checker(match_maker) as the last line of match_maker.__init__
     If no errors result, the match_maker program can continue
 '''
+
+
 class input_checker:
-    
+
     def __init__(self, match_maker):
         self.mm = match_maker
-        
+
         self.main()
-        
+
     def check_bool(self, parameter):
-        return type(parameter) == bool
-    
+        return isinstance(parameter, bool)
+
     def check_file_exists(self, file_name):
-        if type(file_name) != str:
+        if not isinstance(file_name, str):
             return False
-                
+
         full_path = path.join(self.mm.PATH, file_name)
         return path.isfile(full_path)
-        
+
     def check_positive_int(self, parameter):
-        if type(parameter) == int:
+        if isinstance(parameter, int):
             return parameter >= 0
         return False
-    
+
     def check_range_int(self, parameter, lower_bound, upper_bound):
-        if type(parameter) == int:
+        if isinstance(parameter, int):
             return (parameter >= lower_bound and parameter < upper_bound)
         return False
-        
-        
+
     def main(self):
-        
+
         # Check that files exist
-        file_names = [self.mm.STUDENT_PREF, self.mm.FACULTY_PREF, self.mm.TIMES_NAME,
-                      self.mm.FACULTY_TRACK_FILE_NAME, self.mm.STUDENT_TRACK_FILE_NAME,
-                      self.mm.FACULTY_SIMILARITY_FILE_NAME, self.mm.IS_RECRUITING_FILE_NAME,
-                      self.mm.LUNCH_FILE_NAME, self.mm.FACULTY_AVAILABILITY_NAME,
-                      self.mm.STUDENT_AVAILABILITY_NAME]
-        
-        for file in file_names:        
+        file_names = [
+            self.mm.STUDENT_PREF,
+            self.mm.FACULTY_PREF,
+            self.mm.TIMES_NAME,
+            self.mm.FACULTY_TRACK_FILE_NAME,
+            self.mm.STUDENT_TRACK_FILE_NAME,
+            self.mm.FACULTY_SIMILARITY_FILE_NAME,
+            self.mm.IS_RECRUITING_FILE_NAME,
+            self.mm.LUNCH_FILE_NAME,
+            self.mm.FACULTY_AVAILABILITY_NAME,
+            self.mm.STUDENT_AVAILABILITY_NAME]
+
+        for file in file_names:
             if not self.check_file_exists(file):
                 raise ValueError(file + ' is not on the path ' + self.PATH)
-                
+
         # Check bools
         if not self.check_bool(self.mm.USE_INTERVIEW_LIMITS):
             raise ValueError('USE_INTERVIEW_LIMITS' + ' should be a bool')
-        
+
         if not self.check_bool(self.mm.USE_EXTRA_SLOTS):
             raise ValueError('USE_EXTRA_SLOTS' + ' should be a bool')
-            
+
         if not self.check_bool(self.mm.USE_RANKING):
             raise ValueError('USE_RANKING' + ' should be a bool')
-            
+
         if not self.check_bool(self.mm.USE_WORK_LUNCH):
             raise ValueError('USE_WORK_LUNCH' + ' should be a bool')
-            
+
         if not self.check_bool(self.mm.USE_RECRUITING):
             raise ValueError('USE_RECRUITING' + ' should be a bool')
-        
+
         if not self.check_bool(self.mm.USE_AVAILABILITY):
             raise ValueError('USE_AVAILABILITY' + ' should be a bool')
-            
+
         if not self.check_bool(self.mm.USE_FACULTY_SIMILARITY):
             raise ValueError('USE_FACULTY_SIMILARITY' + ' should be a bool')
-            
+
         if not self.check_bool(self.mm.CHECK_MATCHES):
             raise ValueError('CHECK_MATCHES' + ' should be a bool')
-            
+
         if not self.check_bool(self.mm.PRINT_PREFERENCE):
             raise ValueError('PRINT_PREFERENCE' + ' should be a bool')
-            
+
         # Check positive ints
         if not self.check_positive_int(self.mm.NUM_INTERVIEWS):
-            raise ValueError('NUM_INTERVIEWS' + ' should be a non-negative integer')
+            raise ValueError(
+                'NUM_INTERVIEWS' +
+                ' should be a non-negative integer')
 
         if not self.check_positive_int(self.mm.MIN_INTERVIEWS):
-            raise ValueError('MIN_INTERVIEWS' + ' should be a non-negative integer')
-        
+            raise ValueError(
+                'MIN_INTERVIEWS' +
+                ' should be a non-negative integer')
+
         if not self.check_positive_int(self.mm.MAX_INTERVIEWS):
-            raise ValueError('MAX_INTERVIEWS' + ' should be a non-negative integer')
-        
+            raise ValueError(
+                'MAX_INTERVIEWS' +
+                ' should be a non-negative integer')
+
         if not self.check_positive_int(self.mm.NUM_EXTRA_SLOTS):
-            raise ValueError('NUM_EXTRA_SLOTS' + ' should be a non-negative integer')
-            
+            raise ValueError(
+                'NUM_EXTRA_SLOTS' +
+                ' should be a non-negative integer')
+
         if not self.check_positive_int(self.mm.MAX_RANKING):
-            raise ValueError('MAX_RANKING' + ' should be a non-negative integer')
-            
+            raise ValueError(
+                'MAX_RANKING' +
+                ' should be a non-negative integer')
+
         if not self.check_positive_int(self.mm.CHOICE_EXPONENT):
-            raise ValueError('CHOICE_EXPONENT' + ' should be a non-negative integer')
-            
+            raise ValueError(
+                'CHOICE_EXPONENT' +
+                ' should be a non-negative integer')
+
         if not self.check_positive_int(self.mm.LUNCH_PENALTY):
-            raise ValueError('LUNCH_PENALTY' + ' should be a non-negative integer')
-            
+            raise ValueError(
+                'LUNCH_PENALTY' +
+                ' should be a non-negative integer')
+
         if not self.check_positive_int(self.mm.RECRUITING_WEIGHT):
-            raise ValueError('RECRUITING_WEIGHT' + ' should be a non-negative integer')
+            raise ValueError(
+                'RECRUITING_WEIGHT' +
+                ' should be a non-negative integer')
 
         if not self.check_positive_int(self.mm.TRACK_WEIGHT):
-            raise ValueError('TRACK_WEIGHT' + ' should be a non-negative integer')
-            
+            raise ValueError(
+                'TRACK_WEIGHT' +
+                ' should be a non-negative integer')
+
         if not self.check_positive_int(self.mm.FACULTY_SIMILARITY_WEIGHT):
-            raise ValueError('FACULTY_SIMILARITY_WEIGHT' + ' should be a non-negative integer')
-            
+            raise ValueError(
+                'FACULTY_SIMILARITY_WEIGHT' +
+                ' should be a non-negative integer')
+
         if not self.check_positive_int(self.mm.NUM_SUGGESTIONS):
-            raise ValueError('NUM_SUGGESTIONS' + ' should be a non-negative integer')
-            
+            raise ValueError(
+                'NUM_SUGGESTIONS' +
+                ' should be a non-negative integer')
+
         if not self.check_positive_int(self.mm.CHECK_FREQUENCY):
-            raise ValueError('CHECK_FREQUENCY' + ' should be a non-negative integer')
-            
+            raise ValueError(
+                'CHECK_FREQUENCY' +
+                ' should be a non-negative integer')
+
         if not self.check_positive_int(self.mm.MAX_SOLVER_TIME_SECONDS):
-            raise ValueError('MAX_SOLVER_TIME_SECONDS' + ' should be a non-negative integer')
-        
+            raise ValueError(
+                'MAX_SOLVER_TIME_SECONDS' +
+                ' should be a non-negative integer')
+
         if not self.check_positive_int(self.mm.RAND_NUM_STUDENTS):
-            raise ValueError('RAND_NUM_STUDENTS' + ' should be a non-negative integer')
-        
+            raise ValueError(
+                'RAND_NUM_STUDENTS' +
+                ' should be a non-negative integer')
+
         if not self.check_positive_int(self.mm.RAND_NUM_FACULTY):
-            raise ValueError('RAND_NUM_FACULTY' + ' should be a non-negative integer')
-            
+            raise ValueError(
+                'RAND_NUM_FACULTY' +
+                ' should be a non-negative integer')
+
         if not self.check_positive_int(self.mm.RAND_NUM_INTERVIEWS):
-            raise ValueError('RAND_NUM_INTERVIEWS' + ' should be a non-negative integer')
-            
+            raise ValueError(
+                'RAND_NUM_INTERVIEWS' +
+                ' should be a non-negative integer')
+
         if not self.check_positive_int(self.mm.EMPTY_PENALTY):
-            raise ValueError('EMPTY_PENALTY' + ' should be a non-negative integer')
-            
+            raise ValueError(
+                'EMPTY_PENALTY' +
+                ' should be a non-negative integer')
+
         if not self.check_positive_int(self.mm.COLUMN_WIDTH):
-            raise ValueError('COLUMN_WIDTH' + ' should be a non-negative integer')
-            
+            raise ValueError(
+                'COLUMN_WIDTH' +
+                ' should be a non-negative integer')
+
         # Check ranged ints
         if not self.check_range_int(self.mm.FACULTY_ADVANTAGE, 0, 100):
-            raise ValueError('FACULTY_ADVANTAGE' + ' should be an integer between '
-                             + '0' + ' and ' + '100')
-            
-        if not self.check_range_int(self.mm.LUNCH_PERIOD, 0, self.mm.NUM_INTERVIEWS):
+            raise ValueError(
+                'FACULTY_ADVANTAGE' +
+                ' should be an integer between ' +
+                '0' +
+                ' and ' +
+                '100')
+
+        if not self.check_range_int(
+                self.mm.LUNCH_PERIOD,
+                0,
+                self.mm.NUM_INTERVIEWS):
             raise ValueError('LUNCH_PERIOD' + ' should be an integer between '
                              + '0' + ' and ' + 'NUM_INTERVIEWS')
-        
-        if not self.check_range_int(self.mm.NUM_PREFERENCES_2_CHECK, 0, self.mm.NUM_INTERVIEWS):
-            raise ValueError('NUM_PREFERENCES_2_CHECK' + ' should be an integer between '
-                             + '0' + ' and ' + 'NUM_INTERVIEWS')
-            
+
+        if not self.check_range_int(
+                self.mm.NUM_PREFERENCES_2_CHECK,
+                0,
+                self.mm.NUM_INTERVIEWS):
+            raise ValueError(
+                'NUM_PREFERENCES_2_CHECK' +
+                ' should be an integer between ' +
+                '0' +
+                ' and ' +
+                'NUM_INTERVIEWS')
+
         # Check other parameters
         if self.mm.AVAILABILITY_VALUE != -1 * 5000:
-            warnings.warn('We detected that AVAILABILITY_VALUE does not equal -1 * 5000.  This can cause issues.')
-            
-
-
-
-
-
-
-
-
-
+            warnings.warn(
+                'We detected that AVAILABILITY_VALUE does not equal -1 * 5000.  This can cause issues.')
 
 
 if __name__ == '__main__':
