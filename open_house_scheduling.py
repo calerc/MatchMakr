@@ -1046,29 +1046,25 @@ class match_maker():
                         if obj == 0:
                             obj = 1
                         else:
-#                            try:
                             obj = int(np.log10(obj))
-#                            except:
-#                                a = 1
                                 
                         if obj < 1:
                             obj = 1
+                            
+                        if obj == 1:
+                            if schedule[count, i] == 'Free':
+                                match_string = 'Free'
+                            else:
+                                match_string = 'Informational Interview' 
+                        elif obj == 2 or obj == 3:
+                            match_string = 'Moderate Match'
+                        elif obj > 3:
+                            match_string = 'Strong Match' 
                         
 
                         file.writelines(np.array_str(times[i]) + sep_string
                                         + schedule[count, i] + space_string
-                                        + str(obj) + '\n')
-                        
-                        file.writelines('\n')
-                        file.writelines('\n')
-                        file.writelines(
-                                'A match quality >= 3 indicates that the student and faculty member are mutually interested')
-                        file.writelines(
-                                'A match quality of 2 indicates that the student and faculty are moderately well matched')
-                        file.writelines(
-                                'A match quality of 1 indicates that the interview should be used to evaluate the compatability of the student and the department, in general')
-                        file.writelines('\n')
-                        file.writelines('\n')
+                                        + match_string + '\n')
                 else:
                     file.writelines('Time:                     Person:\n')
                     for i in self.all_interviews:
