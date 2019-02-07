@@ -43,17 +43,14 @@ from ortools.sat.python import cp_model
             ENSURE THAT THE DOCUMENTATION IS UP TO SNUFF
 
         Code function:
-            VALIDATE THAT EVERYTHING WORKS USING LAST YEAR'S MATCHES
-            ENSURE THAT ALL STUDENTS GET FAIR MATCHES, REGARDLESS OF PLACE ON LIST
-                This is difficult to do because last year's matches were "alphabetized"
-                But, we might be able to shuffle
+            RANDOMIZE PREFERENCES TO ENSURE THAT THERE IS NOT STRUCTURE IN HOW THEY ARE ASSIGNED
             CREATE GOOGLE SURVEYS
-            ENSURE THAT PARAMETERS DON'T INTERFERE WITH EACH OTHER
             FREEZE
 
         Code accessibility:
             CREATE GUI
             CREATE PUBLIC GITHUB
+                Determine license type and copyright
             FIND SOMEWHERE TO HOST BINARIES
             VIDEO TO YOUTUBE
             
@@ -149,13 +146,17 @@ class match_maker():
         self.MAX_SOLVER_TIME_SECONDS = 180   # range [0, inf), suggested = 190
         
         # Choose if we want to print preference data to worksheets
-        self.DEBUG_PRINT_PREFERENCE = True
+        self.PRINT_PREFERENCE = True
         
         # For testing purposes, we may choose to generate fake data.  These parameters
         # affect how many data points are generated
         self.RAND_NUM_STUDENTS = 70         # Range [0, Inf), suggested = 50
         self.RAND_NUM_FACULTY = 31          # Range [0, Inf), suggested = 35
         self.RAND_NUM_INTERVIEWS = 10       # Range [0, Inf), suggested = 10
+        
+        # For testing purposes, we may choose to randomize the preference order
+        # in order to ensure that the optimizer doesn't favor any students
+        self.RANDOMIZE_PREFERENCES = False
         
         # Initialize empty variables for use later
         self.student_names = []
@@ -172,9 +173,9 @@ class match_maker():
         # Avoid using - it's slow
         # Set to zero to not use
         self.EMPTY_PENALTY = 0 # Range [0, Inf), suggested = 0, suggested to turn on > self.LUNCH_PENALTY ^ 2 (about 500 if using all default parameters)
-
-        # Check parameter validity
         
+        
+        # Check parameter validity        
         input_checker(self)
 
     '''
@@ -273,10 +274,12 @@ class match_maker():
         self.student_pref_objective = np.sum(student_pref, axis=1)
         total_preferences = np.empty((self.NUM_PREFERENCES_2_CHECK))
         preferences_met = np.empty((self.NUM_PREFERENCES_2_CHECK))
+        self.stud_pref_met = np.empty((self.NUM_PREFERENCES_2_CHECK)).astype(object)
         for pref_num in range(self.NUM_PREFERENCES_2_CHECK):
             total_preferences[pref_num] = np.sum(
-                self.student_pref == (10 - pref_num))
-            preferences_met[pref_num] = np.sum(student_pref == (10 - pref_num))
+                self.student_pref == (self.MAX_RANKING - pref_num))
+            self.stud_pref_met = student_pref == (self.MAX_RANKING - pref_num)
+            preferences_met[pref_num] = np.sum(self.stud_pref_met)
 
         self.student_fraction_preferences_met = preferences_met / total_preferences
         print('Fraction of student preferences met: ')
@@ -287,10 +290,12 @@ class match_maker():
         self.faculty_pref_objective = np.sum(faculty_pref, axis=0)
         total_preferences = np.empty((self.NUM_PREFERENCES_2_CHECK))
         preferences_met = np.empty((self.NUM_PREFERENCES_2_CHECK))
+        self.faculty_pref_met = np.empty((self.NUM_PREFERENCES_2_CHECK)).astype(object)
         for pref_num in range(self.NUM_PREFERENCES_2_CHECK):
             total_preferences[pref_num] = np.sum(
-                self.faculty_pref == (10 - pref_num))
-            preferences_met[pref_num] = np.sum(faculty_pref == (10 - pref_num))
+                self.faculty_pref == (self.MAX_RANKING - pref_num))
+            self.faculty_pref_met = faculty_pref == (self.MAX_RANKING - pref_num)
+            preferences_met[pref_num] = np.sum(self.faculty_pref_met)
 
         self.faculty_fraction_preferences_met = preferences_met / total_preferences
         print('Fraction of faculty preferences met: ')
@@ -684,6 +689,11 @@ class match_maker():
         # Extract the preferences
         student_pref = stud_match_data[3:, 1:]
         faculty_pref = faculty_match_data[3:, 1:]
+        
+        # Randomize preferences, if necessary        
+        if self.RANDOMIZE_PREFERENCES:
+            stud_match_data = self.randomize_preferences(stud_match_data)
+            faculty_match_data = self.randomize_preferences(faculty_match_data)
 
         # Statistics
         self.num_students = len(student_names)
@@ -1058,7 +1068,7 @@ class match_maker():
                 file.writelines('\n')
 
                 # Schedule
-                if self.DEBUG_PRINT_PREFERENCE:
+                if self.PRINT_PREFERENCE:
                     file.writelines(
                         'Time:                     Person:                 Match Quality:\n')
                     for i in self.all_interviews:
@@ -1080,13 +1090,16 @@ class match_maker():
                         # Also, make it strictly positive so that it looks like there is "always a benefit"
                         obj = objective[count][i]
                         
-                        if obj == 0:
+                        if obj < 1:
                             obj = 1
                         else:
                             try:
                                 obj = int(np.log10(obj))
                             except:
-                                warnings.warn('NaN problem for ' + name)
+                                warnings.warn('NaN problem for '
+                                              + name + ', obj = '
+                                              + str(obj))
+                                obj = 1
                                 
                         if obj < 1:
                             obj = 1
@@ -1132,6 +1145,19 @@ class match_maker():
 
                 file.writelines('\n')
                 file.writelines('\n')
+                
+    '''
+        Randomize preferences for debuggning purposes
+    '''
+    def randomize_preferences(self, pref_array):
+        num_matches, num_people = np.shape(pref_array)
+        possible_matches = np.arange(num_matches)
+        
+        for person in range(num_people):
+            rand_permute = np.random.choice(
+                        possible_matches, size=num_matches)
+            pref_array[:, person] = pref_array[rand_permute, person]
+                
 
     '''
         Remove students and faculty that are unavailable
@@ -1224,8 +1250,8 @@ class VarArrayAndObjectiveSolutionPrinter(cp_model.CpSolverSolutionCallback):
         num_interviews = self.match_maker.NUM_INTERVIEWS
 
         # Print objective value
-        print('Solution %i' % self.__solution_count)
-        print('  objective value = %i' % self.ObjectiveValue())
+        print('Solution %i' % self.__solution_count, flush=True)
+        print('  objective value = %i' % self.ObjectiveValue(), flush=True)
 
         # Determine what matches were made
         if self.CHECK_MATCHES and (
@@ -1324,8 +1350,8 @@ class input_checker:
         if not self.check_bool(self.mm.CHECK_MATCHES):
             raise ValueError('CHECK_MATCHES' + ' should be a bool')
             
-        if not self.check_bool(self.mm.DEBUG_PRINT_PREFERENCE):
-            raise ValueError('DEBUG_PRINT_PREFERENCE' + ' should be a bool')
+        if not self.check_bool(self.mm.PRINT_PREFERENCE):
+            raise ValueError('PRINT_PREFERENCE' + ' should be a bool')
             
         # Check positive ints
         if not self.check_positive_int(self.mm.NUM_INTERVIEWS):
