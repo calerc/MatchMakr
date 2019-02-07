@@ -8,7 +8,6 @@ import numpy as np
 from os import path, makedirs
 import csv
 from ortools.sat.python import cp_model
-import inspect
 
 
 '''
@@ -42,16 +41,14 @@ import inspect
 
         Code clarity:
             ENSURE THAT THE DOCUMENTATION IS UP TO SNUFF
-            ORGANIZE CONSTANTS
 
         Code function:
             VALIDATE THAT EVERYTHING WORKS USING LAST YEAR'S MATCHES
             ENSURE THAT ALL STUDENTS GET FAIR MATCHES, REGARDLESS OF PLACE ON LIST
                 This is difficult to do because last year's matches were "alphabetized"
+                But, we might be able to shuffle
             CREATE GOOGLE SURVEYS
             ENSURE THAT PARAMETERS DON'T INTERFERE WITH EACH OTHER
-            ERROR-CHECK ANY INPUTS
-            LET STUDENTS KNOW IF MATCH OR "RANDOM"
             PARALLELIZE THE MATCH CHECKER
             FREEZE
 
@@ -146,10 +143,10 @@ class match_maker():
         self.CHECK_FREQUENCY = 20       # range [0, inf), suggested = 20 (when > 20, it can be slow)
 
         # Number of seconds to allow the match maker to run
-        self.MAX_SOLVER_TIME_SECONDS = 20
+        self.MAX_SOLVER_TIME_SECONDS = 180   # range [0, inf), suggested = 190
         
         # Choose if we want to print preference data to worksheets
-        self.DEBUG_PRINT_PREFERENCE = False
+        self.DEBUG_PRINT_PREFERENCE = True
         
         # For testing purposes, we may choose to generate fake data.  These parameters
         # affect how many data points are generated
@@ -160,7 +157,12 @@ class match_maker():
         # Initialize empty variables for use later
         self.student_names = []
         self.faculty_names = []
-
+        
+        # Set the column width (# characters) for printing names to the schedules
+        self.COLUMN_WIDTH = 22
+        
+        # An arbitrary small constant to help with numerical stability
+        self.A_SMALL_CONSTANT = 1E-10
         
         # Penalize having empty interview slots
         # This number should be chosen so that it is larger than lunch penalty
@@ -894,8 +896,10 @@ class match_maker():
 
         # Interview - Faculty Schedule
         self.faculty_schedule = []
+        faculty_objective = np.empty(self.num_faculty).astype(object)
         for p in self.all_faculty:
             temp_list = []
+            temp_objective = np.empty(self.NUM_INTERVIEWS)
             for i in self.all_interviews:
                 s = 0
                 found_match = False
@@ -903,19 +907,23 @@ class match_maker():
                     if self.results[i][s][p] == 1:
                         temp_list.append(self.student_names[s])
                         found_match = True
+                        temp_objective[i] = self.objective_matrix[i, s, p]
                     s += 1
                 if not found_match:
                     temp_list.append('Free')
             self.faculty_schedule.append(temp_list)
+            faculty_objective[p] = temp_objective
 
         self.print_schedules('Faculty', 'faculty_schedules',
                              self.faculty_names, self.faculty_schedule,
-                             self.faculty_suggest_matches)
+                             self.faculty_suggest_matches, faculty_objective)
 
         # Interview - Student Schedule
         self.student_schedule = []
+        student_objective = np.empty(self.num_students).astype(object)
         for s in self.all_students:
             temp_list = []
+            temp_objective = np.empty(self.NUM_INTERVIEWS)
             for i in self.all_interviews:
                 p = 0
                 found_match = False
@@ -923,14 +931,16 @@ class match_maker():
                     if self.results[i][s][p] == 1:
                         temp_list.append(self.faculty_names[p])
                         found_match = True
+                        temp_objective[i] = self.objective_matrix[i, s, p]
                     p += 1
                 if not found_match:
                     temp_list.append('Free')
             self.student_schedule.append(temp_list)
+            student_objective[s] = temp_objective
 
         self.print_schedules('Student', 'student_schedules',
                              self.student_names, self.student_schedule,
-                             self.stud_suggest_matches)
+                             self.stud_suggest_matches, student_objective)
 
         # Matches
         self.matches_text = []
@@ -979,7 +989,8 @@ class match_maker():
             folder_name,
             names1,
             schedule,
-            good_matches):
+            good_matches,
+            objective):
 
         # Get the interview times
         times = np.asarray(self.interview_times)
@@ -1012,17 +1023,52 @@ class match_maker():
                 # Schedule
                 if self.DEBUG_PRINT_PREFERENCE:
                     file.writelines(
-                        'Time:                     Person:                 Preference:\n')
+                        'Time:                     Person:                 Match Quality:\n')
                     for i in self.all_interviews:
 
                         if self.is_odd(i):
+                            sep_char = '+'
                             sep_string = ' +++++++++ '
                         else:
+                            sep_char = '-'
                             sep_string = ' --------- '
+                            
+                        num_spaces_needed = self.COLUMN_WIDTH - len(schedule[count, i])
+                        if num_spaces_needed > 0:
+                            space_string = ' ' + sep_char * num_spaces_needed + ' '
+                        else:
+                            space_string = ' ' + ' '
+                        
+                        # Change the objective value to something easier to understand
+                        # Also, make it strictly positive so that it looks like there is "always a benefit"
+                        obj = objective[count][i]
+                        
+                        if obj == 0:
+                            obj = 1
+                        else:
+#                            try:
+                            obj = int(np.log10(obj))
+#                            except:
+#                                a = 1
+                                
+                        if obj < 1:
+                            obj = 1
+                        
 
                         file.writelines(np.array_str(times[i]) + sep_string
-                                        + schedule[count, i] + sep_string
-                                        + '\n')
+                                        + schedule[count, i] + space_string
+                                        + str(obj) + '\n')
+                        
+                        file.writelines('\n')
+                        file.writelines('\n')
+                        file.writelines(
+                                'A match quality >= 3 indicates that the student and faculty member are mutually interested')
+                        file.writelines(
+                                'A match quality of 2 indicates that the student and faculty are moderately well matched')
+                        file.writelines(
+                                'A match quality of 1 indicates that the interview should be used to evaluate the compatability of the student and the department, in general')
+                        file.writelines('\n')
+                        file.writelines('\n')
                 else:
                     file.writelines('Time:                     Person:\n')
                     for i in self.all_interviews:
@@ -1286,7 +1332,9 @@ class input_checker:
             
         if not self.check_positive_int(self.mm.EMPTY_PENALTY):
             raise ValueError('EMPTY_PENALTY' + ' should be a non-negative integer')
-
+            
+        if not self.check_positive_int(self.mm.COLUMN_WIDTH):
+            raise ValueError('COLUMN_WIDTH' + ' should be a non-negative integer')
             
         # Check ranged ints
         if not self.check_range_int(self.mm.FACULTY_ADVANTAGE, 0, 100):
