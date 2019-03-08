@@ -1,13 +1,18 @@
 from __future__ import division
 from __future__ import print_function
-import multiprocessing
+
 import sys
-from ortools.sat import sat_parameters_pb2
-import warnings
-import numpy as np
 from os import path, makedirs
-import csv
+from ortools.sat import sat_parameters_pb2
 from ortools.sat.python import cp_model
+import numpy as np
+import csv
+import warnings
+import multiprocessing
+
+
+
+
 
 
 '''
@@ -21,7 +26,7 @@ from ortools.sat.python import cp_model
         Reads faculty and student preferences from human-readable .csv
         Can interpret lists as ordered choices
         Can weight faculty preferences higher/lower than student choices
-        Generates human-readable .csv schedules
+        Generates human-readable schedules
         Generates human-readable un-ordered match list
         Allows faculty to request no interviews during lunch
         Give recruiting faculty an advantage in who they choose
@@ -30,7 +35,7 @@ from ortools.sat.python import cp_model
         Accepts a hard limit to maximum number of interviews
         Accepts a hard limit to minimum number of interviews
         Can print preference number to schedules (for debugging)
-        Accepts "not available" slots (BUT THIS IS BUGGY)
+        Accepts "not available" slots
         Accepts a vector to match people based on their track
         Accepts an interviewer similarity score
         Provides suggestions for interview spots
@@ -43,7 +48,6 @@ from ortools.sat.python import cp_model
             ENSURE THAT THE DOCUMENTATION IS UP TO SNUFF
 
         Code function:
-            RANDOMIZE PREFERENCES TO ENSURE THAT THERE IS NOT STRUCTURE IN HOW THEY ARE ASSIGNED
             CREATE GOOGLE SURVEYS
             FREEZE
 
@@ -56,7 +60,8 @@ from ortools.sat.python import cp_model
 
 
     KNOWN BUGS:
-        Sometimes, the same person is suggested more than once
+        bin_needed = bin_needed[0][0] - IndexError: index 0 is out of bounds for axis 0 with size 0
+            This doesn't affect fitting, but it won't allow for output
 '''
 
 
@@ -68,8 +73,8 @@ class match_maker():
         ''' Constants '''
 
         # Files to load
-        self.PATH = "/home/cale/Desktop/open_house/fresh_start"
-        self.STUDENT_PREF = "stud_pref_order.csv"
+        self.PATH = "/media/veracrypt1/Users/Cale/Documents/Calers_Writing/PhD/GEC/scheduling_software/2019_data/processed_for_program"
+        self.STUDENT_PREF = "student_preferences.csv"
         self.FACULTY_PREF = "faculty_preferences.csv"
         self.TIMES_NAME = "interview_times.csv"
         self.FACULTY_TRACK_FILE_NAME = 'faculty_tracks.csv'
@@ -79,44 +84,48 @@ class match_maker():
         self.LUNCH_FILE_NAME = 'faculty_work_lunch.csv'
         self.FACULTY_AVAILABILITY_NAME = 'faculty_availability.csv'
         self.STUDENT_AVAILABILITY_NAME = 'student_availability.csv'
+        self.STUDENT_RANKING_FILE = 'student_ranking.csv'
+        self.FACULTY_RANKING_FILE = 'faculty_ranking.csv'
 
         # Number of interviews
-        self.NUM_INTERVIEWS = 10            # Range [0, Inf) suggested = 10
+        self.NUM_INTERVIEWS = 9            # Range [0, Inf) suggested = 10
         self.all_interviews = range(self.NUM_INTERVIEWS)
 
         self.USE_INTERVIEW_LIMITS = True
         self.MIN_INTERVIEWS = 3             # Range [0, self.MAX_INTERVIEWS]
-        self.MAX_INTERVIEWS = 10            # Range [0, self.NUM_INTERVIEWS]
+        self.MAX_INTERVIEWS = self.NUM_INTERVIEWS            # Range [0, self.NUM_INTERVIEWS]
 
         self.USE_EXTRA_SLOTS = True  # Make reccomendations for matches not made
         # Number of reccomendations, range = [0, Inf), suggested = 2
         self.NUM_EXTRA_SLOTS = 2
 
         # Give the faculty an advantage over students range[0, 100], 50 = no
-        # advantage
-        self.FACULTY_ADVANTAGE = 50     # Range [0, Inf), suggested = 50
+        # advantage, 100 = students don't matter, 0 = faculty don't matter
+        self.FACULTY_ADVANTAGE = 70     # Range [0, Inf), suggested = 70
 
         # Use ranked preferences instead of binary(want/don't want)
         self.USE_RANKING = True     # True if use preference order instead of binary
         # What value is given to the first name in a list of preferences
-        self.MAX_RANKING = 10
+        self.MAX_RANKING = self.NUM_INTERVIEWS
         # What exponent should be used for ranks? If n, first choice is
         # self.MAX_RANKING ^ n, and last choice is 1 ^ n
-        self.CHOICE_EXPONENT = 2
+        self.CHOICE_EXPONENT = 4
 
         # Penalize the need to work over lunch
         self.USE_WORK_LUNCH = True
-        self.LUNCH_PENALTY = 10     # Range [0, Inf), suggested = 10
+        self.LUNCH_PENALTY = 10000     # Range [0, Inf), suggested = 10
         self.LUNCH_PERIOD = 4       # Range [0, self.NUM_INTERVIEWS]
 
         # Give recruiting faculty an advantage over non-recruiting faculty
         self.USE_RECRUITING = True
-        self.RECRUITING_WEIGHT = 10     # Range [0, Inf), suggested = 10
-
+        self.RECRUITING_WEIGHT = 10000     # Range [0, Inf), suggested = 200
+        
         # If some people are not available for some (or all) interviews, use
         # this
         self.USE_AVAILABILITY = True
-        # This parameter probably does not need tweeked
+        # This parameter probably does not need tweeked,
+        # it is just a negative weight that adds a strong cost to making
+        # unavailable people interview
         self.AVAILABILITY_VALUE = -1 * 5000
 
         # A track is a similarity between an interviewer and an interviewee
@@ -140,7 +149,7 @@ class match_maker():
         # When a solution is found, we will print out how many people got their
         # first, second, ..., n^th choices.  This parameter is n
         # Range [0, self.NUM_INTERVIEWS), suggested = 3
-        self.NUM_PREFERENCES_2_CHECK = 3
+        self.NUM_PREFERENCES_2_CHECK = 5
 
         # After all matches have been made, suggest interesting people to talk with
         # During free time.  This is the number of suggestions to make
@@ -205,16 +214,55 @@ class match_maker():
 
         return data
 
+    ''' Calculate the rankings for students and faculty '''
+    
+    def calc_ranking(self):
+        
+        # Student
+        student_value = np.sum(self.faculty_pref, axis=1)        
+        sorted_values = np.flipud(np.argsort(student_value))
+        
+        self.student_rank = np.empty((self.num_students, 3), dtype=object)
+        self.student_rank[:, 1] = self.student_names
+        self.student_rank[:, 2] = student_value
+        self.student_rank = self.student_rank[sorted_values, :]
+        self.student_rank[:, 0] = np.arange(self.num_students)        
+        
+        with open(path.join(self.PATH, self.STUDENT_RANKING_FILE), 'w') as csvfile:
+            writer = csv.writer(csvfile, delimiter=',')
+            writer.writerow([ 'Rank', 'Name', 'Score'])
+            for row in self.student_rank:
+                writer.writerow(row)
+                
+        
+        
+        # Faculty
+        faculty_value = np.sum(self.student_pref, axis=0)
+        sorted_values = np.flipud(np.argsort(faculty_value))
+        
+        self.faculty_rank = np.empty((self.num_faculty, 3), dtype=object)
+        self.faculty_rank[:, 1] = self.faculty_names
+        self.faculty_rank[:, 2] = faculty_value
+        self.faculty_rank = self.faculty_rank[sorted_values, :]
+        self.faculty_rank[:, 0] = np.arange(self.num_faculty)
+        
+        with open(path.join(self.PATH, self.FACULTY_RANKING_FILE), 'w') as csvfile:
+            writer = csv.writer(csvfile, delimiter=',')
+            writer.writerow([ 'Rank', 'Name', 'Score'])
+            for row in self.faculty_rank:
+                writer.writerow(row)
+        
+        
     ''' Transform the data into objective matrix'''
-
+    
     def calc_objective_matrix(self):
 
         # Determine how to weight faculty preferences over student preferences
         alpha = self.FACULTY_ADVANTAGE
         beta = 100 - alpha
         self.objective_matrix = (
-            alpha * self.faculty_pref
-            + beta * self.student_pref).astype(int)
+            alpha * np.power(self.faculty_pref, self.CHOICE_EXPONENT)
+            + beta * np.power(self.student_pref, self.CHOICE_EXPONENT)).astype(int)
 
         # Give recruiting faculty an advantage
         if self.USE_RECRUITING:
@@ -270,13 +318,67 @@ class match_maker():
             i_unavail, s_unavail = np.where(self.student_availability == 0)
             self.objective_matrix[i_unavail,
                                   s_unavail, :] = self.AVAILABILITY_VALUE
-
-        # Square the objective matrix to maximize chance of getting first
-        # choice
-        objective_sign = np.sign(self.objective_matrix)
-        self.objective_matrix = np.power(
-            self.objective_matrix, self.CHOICE_EXPONENT)
-        self.objective_matrix *= objective_sign
+       
+    ''' Check if availability is respected '''
+    
+    def check_availability(self):
+        
+        # Faculty
+        requested_off = np.where(self.faculty_availability == 0)
+        not_respected = self.results[requested_off[0],
+                                     :,
+                                     requested_off[1]] == 1
+        problems = np.where(not_respected == True)
+        faculty_names = self.faculty_names[problems[1]]
+        faculty_names = np.unique(faculty_names)
+        
+        print('')
+        print('**************************************')
+        print('Faculty schedules not respected')
+        print(faculty_names)
+        
+        # Students
+        requested_off = np.where(self.student_availability == 0)
+        not_respected = self.results[requested_off[0],
+                                     requested_off[1],
+                                     :] == 1
+        problems = np.where(not_respected == True)
+        student_names = self.student_names[problems[1]]
+        student_names = np.unique(faculty_names)
+        
+        print('Student schedules not respected')
+        print(student_names)
+        print('**************************************')
+        print('')
+        
+    ''' Check if lunch preferences are respected '''
+    
+    def check_lunch(self):
+        
+        lunch_results = self.results[self.LUNCH_PERIOD, :, :]
+        work_during_lunch = np.sum(lunch_results, axis=0)
+        
+        
+        request_off = np.where(self.will_work_lunch == 1)
+        demand_off = np.where(self.will_work_lunch == 0)
+        
+        request_status = np.concatenate((np.reshape(self.faculty_names[request_off], (-1, 1)),
+        								 np.reshape(work_during_lunch[request_off] == 0, (-1, 1))),
+        								 axis=1)
+        demand_status = np.concatenate((np.reshape(self.faculty_names[demand_off], (-1, 1)),
+        								 np.reshape(work_during_lunch[demand_off] == 0, (-1, 1))),
+        								 axis=1)
+        
+        print('')
+        print('**************************************')
+        print('Lunch Preference Respected:')
+        print('Request:')
+        print(request_status)
+        print('')
+        print('Demand:')
+        print(demand_status)
+        print('**************************************')
+        print('')
 
     ''' Track how many people got their preferences '''
 
@@ -296,8 +398,12 @@ class match_maker():
             preferences_met[pref_num] = np.sum(self.stud_pref_met)
 
         self.student_fraction_preferences_met = preferences_met / total_preferences
+        
+        print('')
+        print('**************************************')
         print('Fraction of student preferences met: ')
         print(self.student_fraction_preferences_met)
+        print('')
 
         # Faculty
         faculty_pref = self.faculty_pref * matches
@@ -316,6 +422,12 @@ class match_maker():
         self.faculty_fraction_preferences_met = preferences_met / total_preferences
         print('Fraction of faculty preferences met: ')
         print(self.faculty_fraction_preferences_met)
+        print('**************************************')
+        print('')
+        
+        
+
+        
 
     ''' Randomly generate prefered matches for testing '''
 
@@ -380,10 +492,12 @@ class match_maker():
                 # suggestions needed
                 summed_counts = np.cumsum(unique_counts)
                 bin_needed = np.where(summed_counts > self.NUM_SUGGESTIONS)
-                if np.shape(bin_needed)[0] == 0:
+                if (np.shape(bin_needed)[0] == 0
+                    or np.shape(bin_needed[0])[0] == 0):
+                    
                     bin_needed = np.shape(summed_counts)[0] - 1
                 else:
-                    bin_needed = bin_needed[0][0]
+                    bin_needed = bin_needed[0][0]                       
 
                 # Use all of the matches from the first few bins
                 if bin_needed > 0:
@@ -533,8 +647,11 @@ class match_maker():
     def load_availability(self, filename, num_expected_available):
 
         # Load the availability
-        availability = self.load_data_from_human_readable(
-            filename, False).astype(int)
+        try:
+            availability = self.load_data_from_human_readable(
+                filename).astype(int)
+        except:
+            raise ValueError('Availability data at ' + filename + ' is invalid.  Check that all values are 1''s or 0''s')
 
         # Check that the number of availabilities is expected
         [_, num_available] = np.shape(availability)
@@ -558,18 +675,40 @@ class match_maker():
     def load_faculty_similarity(self):
 
         # Load the matrix data
-        self.faculty_similarity = self.load_matrix_data(
-            self.FACULTY_SIMILARITY_FILE_NAME)
-
-        # Convert to an array
-        self.faculty_similarity = np.asarray(
-            self.faculty_similarity, dtype=int)
-
-        # Check that the array size is correct
-        num_rows, num_columns = np.shape(self.faculty_similarity)
-        if num_rows != self.num_faculty or num_columns != self.num_faculty:
-            raise ValueError(
-                'Faculty similarity size does not match the number of faculty')
+        similarity = self.load_data_from_human_readable(
+                self.FACULTY_SIMILARITY_FILE_NAME)
+        
+        num_pref, num_faculty = np.shape(similarity)
+        if num_faculty != self.num_faculty:
+            raise ValueError('The number of faculty with similarities does not match the total number of faculty')     
+        
+        # Remove spaces from names and preferences
+        for row_num, row in enumerate(similarity):
+            for col_num, col in enumerate(row):
+                similarity[row_num, col_num] = similarity[row_num,
+                                                           col_num].replace(' ', '')
+        
+        # Create the similarity matrix
+        self.faculty_similarity = np.zeros(
+                (self.num_faculty, self.num_faculty), dtype=int)
+        
+        names_not_found = []
+        for row_num, row in enumerate(similarity):
+            benefit = num_pref - row_num
+            for col_num, name in enumerate(row):
+                if name != '':
+                    faculty_idx = np.where(self.faculty_names == name)
+                    if np.shape(faculty_idx)[1] == 0:
+                        names_not_found.append(name)
+                                                
+                    self.faculty_similarity[row_num, faculty_idx[0]] = benefit
+        
+        unique_unfound_names = np.asarray(np.unique(names_not_found))
+        print('Faculty similarity - names not found: ')
+        print(*unique_unfound_names, sep='\n')
+        if np.shape(unique_unfound_names)[0] == 0:
+            print('none')
+        print('')
 
     '''
         Loads the interview times from a csv
@@ -608,12 +747,12 @@ class match_maker():
         # Load the lunch and recruiting weight data
         if self.USE_RECRUITING:
             self.is_recruiting = self.load_data_from_human_readable(
-                self.IS_RECRUITING_FILE_NAME, False)
+                self.IS_RECRUITING_FILE_NAME)
             self.is_recruiting = self.response_to_weight(self.is_recruiting)
 
         if self.USE_WORK_LUNCH:
             self.will_work_lunch = self.load_data_from_human_readable(
-                self.LUNCH_FILE_NAME, False)
+                self.LUNCH_FILE_NAME)
             self.will_work_lunch = self.response_to_weight(
                 self.will_work_lunch)
 
@@ -644,7 +783,7 @@ class match_maker():
 
     '''
 
-    def load_data_from_human_readable(self, filename, append_name=True):
+    def load_data_from_human_readable(self, filename):
 
         # Load the data
         match_data = []
@@ -720,40 +859,73 @@ class match_maker():
         # Remove spaces from names and preferences
         for count, name in enumerate(student_names):
             student_names[count] = student_names[count].replace(' ', '')
+            student_names[count] = student_names[count].replace(',', '')
 
         for count, name in enumerate(faculty_names):
             faculty_names[count] = faculty_names[count].replace(' ', '')
+            faculty_names[count] = faculty_names[count].replace(',', '')
 
         for count, pref in enumerate(student_pref):
             for count2, pref2 in enumerate(pref):
                 student_pref[count, count2] = student_pref[count,
                                                            count2].replace(' ', '')
+                student_pref[count, count2] = student_pref[count,
+                                                           count2].replace(',', '')
 
         for count, pref in enumerate(faculty_pref):
             for count2, pref2 in enumerate(pref):
                 faculty_pref[count, count2] = faculty_pref[count,
                                                            count2].replace(' ', '')
-
+                faculty_pref[count, count2] = faculty_pref[count,
+                                                           count2].replace(',', '')
+                
         # Fill-in faculty preferences
         self.faculty_pref = np.zeros((self.num_students, self.num_faculty))
 
+        names_not_found = []
         for p in self.all_faculty:
             temp_pref = faculty_pref[np.where(
                 faculty_pref[:, p] != ''), p].flatten()
+            pref_num = 0
             for count, pref in enumerate(temp_pref):
                 student_num = np.where(student_names == pref)
-                self.faculty_pref[student_num, p] = self.MAX_RANKING - count
+                if np.shape(student_num)[1] == 0:
+                    names_not_found.append(pref)
+                else:
+                    self.faculty_pref[student_num, p] = self.MAX_RANKING - pref_num
+                    pref_num += 1
+                
+        unique_unfound_names = np.asarray(np.unique(names_not_found))
+        print('Student names not found: ')        
+        if np.shape(unique_unfound_names)[0] == 0:
+            print('none')
+        else:
+            print(*unique_unfound_names, sep='\n')
+            
+        print('')
 
         # Fill-in student preferences
         self.student_pref = np.zeros((self.num_students, self.num_faculty))
-
+        
+        names_not_found = []
         for s in self.all_students:
             temp_pref = student_pref[np.where(
                 student_pref[:, s] != ''), s].flatten()
+            pref_num = 0
             for count, pref in enumerate(temp_pref):
                 faculty_num = np.where(faculty_names == pref)
-                self.student_pref[s, faculty_num] = self.MAX_RANKING - count
-
+                if np.shape(faculty_num)[1] == 0:
+                    names_not_found.append(pref)
+                else:
+                    self.student_pref[s, faculty_num] = self.MAX_RANKING - pref_num
+                    pref_num += 1
+        unique_unfound_names = np.asarray(np.unique(names_not_found))
+        print('Faculty names not found: ')
+        print(*unique_unfound_names, sep='\n')
+        if np.shape(unique_unfound_names)[0] == 0:
+            print('none')
+        print('')
+        
         # Assign object names
         self.student_names = student_names
         self.faculty_names = faculty_names
@@ -773,8 +945,12 @@ class match_maker():
             self.STUDENT_TRACK_FILE_NAME)
 
         # Find students and faculty that are in the same track
-        all_tracks = np.concatenate(
-            (self.faculty_tracks, self.student_tracks), axis=1)
+        try:
+            all_tracks = np.concatenate(
+                (self.faculty_tracks, self.student_tracks), axis=1)
+        except:
+           raise ValueError('There is a typo in the tracks data.  Check that there is one row of names and one row of data') 
+           
         unique_tracks, unique_idx = np.unique(all_tracks, return_inverse=True)
 
         self.same_track = np.zeros((self.num_students, self.num_faculty))
@@ -784,7 +960,7 @@ class match_maker():
                 faculty_nums = np.reshape(
                     same_track[same_track < self.num_faculty], (1, -1))
                 student_nums = np.reshape(
-                    same_track[same_track >= self.num_faculty] - self.num_faculty, (-1, 1))
+                    same_track[same_track >= self.num_faculty] - self.num_faculty - 1, (-1, 1))
 
                 self.same_track[student_nums, faculty_nums] = 1
 
@@ -800,6 +976,7 @@ class match_maker():
         # Get objective matrix
         # self.define_random_matches()
         self.load_data()
+        self.calc_ranking()
         objective_matrix = self.objective_matrix
 
         # Creates interview variables.
@@ -948,6 +1125,8 @@ class match_maker():
 
             # Check the percentage of preferences met
             self.check_preferences(self.matches)
+            self.check_lunch()
+            self.check_availability()
 
         else:
             print('-------- Solver failed! --------')
@@ -1043,7 +1222,7 @@ class match_maker():
     '''
         Print schedules
         names1 = people who the schedules are for
-        names2 = people on the scheudles
+        names2 = people on the schedules
         data_array:
                 rows = candidates
                 columns = people who the schedules are for
@@ -1162,7 +1341,7 @@ class match_maker():
                     if match_count == 0:
                         file.writelines(match)
                     else:
-                        file.writelines(', ' + match)
+                        file.writelines('; ' + match)
 
                 file.writelines('\n')
                 file.writelines('\n')
@@ -1232,7 +1411,13 @@ class match_maker():
             elif response.lower() == 'no':
                 out_array[count] = 0
             elif response.lower() == 'maybe':
+                out_array[count] = 1                
+            elif response.lower() == 'if it helps me interview students that are important to me':
                 out_array[count] = 1
+            elif response.lower() == 'if it helps the department ...':
+                out_array[count] = 0
+            else:
+                raise ValueError('Response unknown')
 
         return out_array
 
@@ -1333,7 +1518,7 @@ class input_checker:
 
     def check_range_int(self, parameter, lower_bound, upper_bound):
         if isinstance(parameter, int):
-            return (parameter >= lower_bound and parameter < upper_bound)
+            return (parameter >= lower_bound and parameter <= upper_bound)
         return False
 
     def main(self):
