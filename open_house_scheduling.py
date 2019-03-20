@@ -50,6 +50,17 @@ import multiprocessing
         Code function:
             CREATE GOOGLE SURVEYS
             FREEZE
+            Make seperate results folder
+            Make output log
+            Make summary folder
+            Read for google survey, directly
+            Print faculty names nicely
+            Output pdf file
+            Get field length of output dynamically
+            Create batch emailer
+            Split parameters (e.g. availablity) between faculty and students
+            Move names to load names
+            Alphabetize functions
 
         Code accessibility:
             CREATE GUI
@@ -74,14 +85,9 @@ class match_maker():
 
         # Files to load
         self.PATH = "/media/veracrypt1/Users/Cale/Documents/Calers_Writing/PhD/GEC/scheduling_software/2019_data/processed_for_program"
-        self.STUDENT_PREF = "student_preferences.csv"
-        self.FACULTY_PREF = "faculty_preferences.csv"
+        self.STUDENT_PREF = "CWRU_BME_Open_House-Students.csv"
+        self.FACULTY_PREF = "CWRU_BME_Open_House-Faculty.csv"
         self.TIMES_NAME = "interview_times.csv"
-        self.FACULTY_TRACK_FILE_NAME = 'faculty_tracks.csv'
-        self.STUDENT_TRACK_FILE_NAME = 'student_tracks.csv'
-        self.FACULTY_SIMILARITY_FILE_NAME = 'faculty_similarity.csv'
-        self.IS_RECRUITING_FILE_NAME = 'faculty_is_recruiting.csv'
-        self.LUNCH_FILE_NAME = 'faculty_work_lunch.csv'
         self.FACULTY_AVAILABILITY_NAME = 'faculty_availability.csv'
         self.STUDENT_AVAILABILITY_NAME = 'student_availability.csv'
         self.STUDENT_RANKING_FILE = 'student_ranking.csv'
@@ -122,7 +128,8 @@ class match_maker():
         
         # If some people are not available for some (or all) interviews, use
         # this
-        self.USE_AVAILABILITY = True
+        self.USE_STUDENT_AVAILABILITY = True
+        self.USE_FACULTY_AVAILABILITY = True
         # This parameter probably does not need tweeked,
         # it is just a negative weight that adds a strong cost to making
         # unavailable people interview
@@ -307,14 +314,12 @@ class match_maker():
 
         # Add not available slots as cost
         # THIS CODE MUST COME LAST WHEN CALCULATING COST
-        if self.USE_AVAILABILITY:
-
-            # Faculty
+        if self.USE_FACULTY_AVAILABILITY:
             i_unavail, f_unavail = np.where(self.faculty_availability == 0)
             self.objective_matrix[i_unavail, :,
                                   f_unavail] = self.AVAILABILITY_VALUE
 
-            # Students
+        if self.USE_STUDENT_AVAILABILITY:
             i_unavail, s_unavail = np.where(self.student_availability == 0)
             self.objective_matrix[i_unavail,
                                   s_unavail, :] = self.AVAILABILITY_VALUE
@@ -605,6 +610,103 @@ class match_maker():
 
         return self.num_cpus
 
+    ''' Get the columns where the preference data is '''
+    
+    def get_pref_col(self, faculty_pref, student_pref):
+                
+        FACULTY_PREF_STEM = 'PreferenceforStudents'
+        STUD_PREF_STEM = 'PreferenceforFaculty'
+
+        faculty_col = self.get_pref_loop(FACULTY_PREF_STEM, faculty_pref)
+        student_col = self.get_pref_loop(STUD_PREF_STEM, student_pref)
+
+        return faculty_col, student_col
+    
+    def get_sim_col(self, faculty_pref):
+        
+        STEM = 'MostSimilarFaculty'
+        col = self.get_pref_loop(STEM, faculty_pref)
+        
+        return col
+    
+    def load_recruiting_data(self, faculty_pref):
+        
+        STEM = 'recruiting'
+        col = self.find_single_column(faculty_pref, STEM)        
+        
+        self.is_recruiting = faculty_pref[1:, col]        
+        self.is_recruiting[self.is_recruiting == ''] = 'No'
+        
+        self.is_recruiting = self.response_to_weight(self.is_recruiting)
+        
+    def load_lunch_data(self, faculty_pref):
+        STEM = 'lunch'
+        
+        col = self.find_single_column(faculty_pref, STEM)        
+        
+        self.will_work_lunch = faculty_pref[1:, col]        
+        self.will_work_lunch[self.will_work_lunch == ''] = 'Yes'
+        
+        self.will_work_lunch = self.response_to_weight(self.will_work_lunch)
+        
+    def find_single_column(self, faculty_pref, stem):
+        
+        num_cols = len(faculty_pref[0])
+        
+        found = False
+        count = 0       
+        while not found and count < num_cols:
+            
+            word = faculty_pref[0, count]
+            if word.find(stem) != -1:
+                found = True
+            else:
+                count += 1
+        
+        if found == False:
+            return -1
+        else:        
+            return count
+        
+        
+        
+    
+    ''' Get data from multi-column fields '''
+    
+    def get_pref_loop(self, stem, pref):
+        
+        NUMBER_SUFFIX = ['st', 'nd', 'rd', 'th']
+            
+        num_interviews = 0
+        for word in pref[0]:
+            if word.find(stem) != -1:
+                num_interviews += 1
+
+        col = np.zeros(num_interviews)
+        for i in range(num_interviews):
+            num = i + 1
+            if num % 10 == 1 and num != 11:
+                suffix = NUMBER_SUFFIX[0]
+            elif num % 10 == 2:
+                suffix = NUMBER_SUFFIX[1]
+            elif num % 10 == 3:
+                suffix = NUMBER_SUFFIX[2]
+            else:
+                suffix = NUMBER_SUFFIX[3]
+                
+            col_name = str(num) + suffix + stem
+
+            try:
+                col[i] = np.where(pref[0] == col_name)[0][0]
+                if col[i] == 0:
+                    raise ValueError('Field not found: ' + col_name)
+            except:
+                raise ValueError('Field not found: ' + col_name)
+                    
+        return col
+
+
+
     ''' Check what names should be appended to student array '''
 
     def get_unique_student_names(self, new_names):
@@ -672,22 +774,16 @@ class match_maker():
         Load faculty similarity matrix
     '''
 
-    def load_faculty_similarity(self):
+    def load_faculty_similarity(self, faculty_match_data):
 
         # Load the matrix data
-        similarity = self.load_data_from_human_readable(
-                self.FACULTY_SIMILARITY_FILE_NAME)
+        col = self.get_sim_col(faculty_match_data)
+        similarity = np.transpose(faculty_match_data[1:, col.astype(int)])
         
         num_pref, num_faculty = np.shape(similarity)
         if num_faculty != self.num_faculty:
             raise ValueError('The number of faculty with similarities does not match the total number of faculty')     
-        
-        # Remove spaces from names and preferences
-        for row_num, row in enumerate(similarity):
-            for col_num, col in enumerate(row):
-                similarity[row_num, col_num] = similarity[row_num,
-                                                           col_num].replace(' ', '')
-        
+       
         # Create the similarity matrix
         self.faculty_similarity = np.zeros(
                 (self.num_faculty, self.num_faculty), dtype=int)
@@ -707,7 +803,7 @@ class match_maker():
         print('Faculty similarity - names not found: ')
         print(*unique_unfound_names, sep='\n')
         if np.shape(unique_unfound_names)[0] == 0:
-            print('none')
+            print('-- None --')
         print('')
 
     '''
@@ -729,43 +825,64 @@ class match_maker():
     '''
 
     def load_data(self):
+        
+        # Load the Google Forms data
+        stud_match_data = []
+        with open(path.join(self.PATH, self.STUDENT_PREF), 'r') as csvfile:
+            reader = csv.reader(csvfile, delimiter=',')
+            for row in reader:
+                stud_match_data.append(row)
+
+        faculty_match_data = []
+        with open(path.join(self.PATH, self.FACULTY_PREF), 'r') as csvfile:
+            reader = csv.reader(csvfile, delimiter=',')
+            for row in reader:
+                faculty_match_data.append(row)
+                
+        # Make the data into numpy arrays
+        stud_match_data = np.asarray(stud_match_data)
+        faculty_match_data = np.asarray(faculty_match_data)
+                
+        # Match the names nicely
+        faculty_col = np.where(faculty_match_data[0] == 'Full Name')[0][0]
+        self.nice_faculty_names = faculty_match_data[1:, faculty_col]
+        
+        student_col = np.where(stud_match_data[0] == 'Full Name')[0][0]
+        self.nice_student_names = stud_match_data[1:, student_col]
+        
+        # Remove characters that cause trouble
+        faculty_match_data = self.remove_characters(faculty_match_data)
+        stud_match_data = self.remove_characters(stud_match_data)
 
         # Load the interview times
         self.load_interview_times()
 
         # Load the preference data
-        self.load_preference_data()
+        self.load_preference_data(faculty_match_data, stud_match_data)
 
         # Load the track data
         if self.USE_TRACKS:
-            self.load_track_data()
+            self.load_track_data(faculty_match_data, stud_match_data)
 
         # Load the faculty similarity data
         if self.USE_FACULTY_SIMILARITY:
-            self.load_faculty_similarity()
+            self.load_faculty_similarity(faculty_match_data)
 
         # Load the lunch and recruiting weight data
         if self.USE_RECRUITING:
-            self.is_recruiting = self.load_data_from_human_readable(
-                self.IS_RECRUITING_FILE_NAME)
-            self.is_recruiting = self.response_to_weight(self.is_recruiting)
+            self.load_recruiting_data(faculty_match_data)
 
         if self.USE_WORK_LUNCH:
-            self.will_work_lunch = self.load_data_from_human_readable(
-                self.LUNCH_FILE_NAME)
-            self.will_work_lunch = self.response_to_weight(
-                self.will_work_lunch)
+            self.load_lunch_data(faculty_match_data)
 
         # Load the availability data
-        if self.USE_AVAILABILITY:
-
-            # Student
+        if self.USE_STUDENT_AVAILABILITY:
             self.student_availability, self.students_avail = self.load_availability(
                 self.STUDENT_AVAILABILITY_NAME, len(self.student_names))
-
-            # Faculty
+            
+        if self.USE_FACULTY_AVAILABILITY:
             self.faculty_availability, self.faculty_avail = self.load_availability(
-                self.FACULTY_AVAILABILITY_NAME, len(self.faculty_names))
+                self.FACULTY_AVAILABILITY_NAME, len(self.faculty_names))          
 
         # Calculate the objective matrix
         self.calc_objective_matrix()
@@ -816,35 +933,19 @@ class match_maker():
         Load the preference data
     '''
 
-    def load_preference_data(self):
-
-        # Load the student data
-        stud_match_data = []
-        with open(path.join(self.PATH, self.STUDENT_PREF), 'r') as csvfile:
-            reader = csv.reader(csvfile, delimiter=',')
-            for row in reader:
-                stud_match_data.append(row)
-
-        # Load the faculty data
-        faculty_match_data = []
-        with open(path.join(self.PATH, self.FACULTY_PREF), 'r') as csvfile:
-            reader = csv.reader(csvfile, delimiter=',')
-            for row in reader:
-                faculty_match_data.append(row)
-
-        # Make the data into numpy arrays
-        stud_match_data = np.asarray(stud_match_data)
-        faculty_match_data = np.asarray(faculty_match_data)
-
-        # Extract the names
-        student_names = stud_match_data[1, 1:]
-        student_names = student_names[np.where(student_names != '')]
-        faculty_names = faculty_match_data[1, 1:]
-        faculty_names = faculty_names[np.where(faculty_names != '')]
+    def load_preference_data(self, faculty_match_data, stud_match_data):
+       
+        # Extract the names without characters that cause trouble
+        faculty_col = np.where(faculty_match_data[0] == 'FullName')[0][0]
+        faculty_names = faculty_match_data[1:, faculty_col]
+        
+        student_col = np.where(stud_match_data[0] == 'FullName')[0][0]
+        student_names = stud_match_data[1:, student_col]
 
         # Extract the preferences
-        student_pref = stud_match_data[3:, 1:]
-        faculty_pref = faculty_match_data[3:, 1:]
+        faculty_col, student_col = self.get_pref_col(faculty_match_data, stud_match_data)         
+        student_pref = np.transpose(stud_match_data[1:, student_col.astype(int)])
+        faculty_pref = np.transpose(faculty_match_data[1:, faculty_col.astype(int)])
 
         # Randomize preferences, if necessary
         if self.RANDOMIZE_PREFERENCES:
@@ -856,29 +957,6 @@ class match_maker():
         self.num_faculty = len(faculty_names)
         self.all_students = range(self.num_students)
         self.all_faculty = range(self.num_faculty)
-
-        # Remove spaces from names and preferences
-        for count, name in enumerate(student_names):
-            student_names[count] = student_names[count].replace(' ', '')
-            student_names[count] = student_names[count].replace(',', '')
-
-        for count, name in enumerate(faculty_names):
-            faculty_names[count] = faculty_names[count].replace(' ', '')
-            faculty_names[count] = faculty_names[count].replace(',', '')
-
-        for count, pref in enumerate(student_pref):
-            for count2, pref2 in enumerate(pref):
-                student_pref[count, count2] = student_pref[count,
-                                                           count2].replace(' ', '')
-                student_pref[count, count2] = student_pref[count,
-                                                           count2].replace(',', '')
-
-        for count, pref in enumerate(faculty_pref):
-            for count2, pref2 in enumerate(pref):
-                faculty_pref[count, count2] = faculty_pref[count,
-                                                           count2].replace(' ', '')
-                faculty_pref[count, count2] = faculty_pref[count,
-                                                           count2].replace(',', '')
                 
         # Fill-in faculty preferences
         self.faculty_pref = np.zeros((self.num_students, self.num_faculty))
@@ -899,7 +977,7 @@ class match_maker():
         unique_unfound_names = np.asarray(np.unique(names_not_found))
         print('Student names not found: ')        
         if np.shape(unique_unfound_names)[0] == 0:
-            print('none')
+            print('-- None --')
         else:
             print(*unique_unfound_names, sep='\n')
             
@@ -924,7 +1002,7 @@ class match_maker():
         print('Faculty names not found: ')
         print(*unique_unfound_names, sep='\n')
         if np.shape(unique_unfound_names)[0] == 0:
-            print('none')
+            print('-- None --')
         print('')
         
         # Assign object names
@@ -937,18 +1015,20 @@ class match_maker():
         faculty who have the same specialty.
     '''
 
-    def load_track_data(self):
-
+    def load_track_data(self, faculty_match_data, stud_match_data):
+        
+        TRACK_STEM = 'Track'
+        faculty_col = np.where(faculty_match_data[0] == TRACK_STEM)[0][0]
+        student_col = np.where(stud_match_data[0] == TRACK_STEM)[0][0]
+        
         # Get the track data from files
-        self.faculty_tracks = self.load_data_from_human_readable(
-            self.FACULTY_TRACK_FILE_NAME)
-        self.student_tracks = self.load_data_from_human_readable(
-            self.STUDENT_TRACK_FILE_NAME)
+        self.faculty_tracks = faculty_match_data[1:, faculty_col]
+        self.student_tracks = stud_match_data[1:, student_col]
 
         # Find students and faculty that are in the same track
         try:
             all_tracks = np.concatenate(
-                (self.faculty_tracks, self.student_tracks), axis=1)
+                (self.faculty_tracks, self.student_tracks), axis=0)
         except:
            raise ValueError('There is a typo in the tracks data.  Check that there is one row of names and one row of data') 
            
@@ -1016,7 +1096,7 @@ class match_maker():
                     p, s, i)] for p in self.all_faculty for i in self.all_interviews)
 
                 # Set minimum number of interviews
-                if not self.USE_AVAILABILITY:
+                if not self.USE_STUDENT_AVAILABILITY:
                     model.Add(self.MIN_INTERVIEWS <= num_interviews_stud)
                 else:
 
@@ -1046,7 +1126,7 @@ class match_maker():
                 # If the person is available for more than half the interview
                 # try not to penalize them for being unavailable.  Otherwise,
                 # let them be penalized
-                if not self.USE_AVAILABILITY:
+                if not self.USE_FACULTY_AVAILABILITY:
                     model.Add(self.MIN_INTERVIEWS <= num_interviews_prof)
                 else:
 
@@ -1356,6 +1436,17 @@ class match_maker():
                 possible_matches, size=num_matches)
             pref_array[:, person] = pref_array[rand_permute, person]
 
+    ''' Remove characters that cause trouble '''
+    def remove_characters(self, char_array):
+
+        for row_num, row in enumerate(char_array):
+            for cell_num, cell in enumerate(row):
+                char_array[row_num, cell_num] = char_array[row_num, cell_num].replace(' ', '')
+                char_array[row_num, cell_num] = char_array[row_num, cell_num].replace(',', '')
+                
+        return char_array
+
+
     '''
         Remove students and faculty that are unavailable
     '''
@@ -1409,9 +1500,9 @@ class match_maker():
                 out_array[count] = 0
             elif response.lower() == 'maybe':
                 out_array[count] = 1                
-            elif response.lower() == 'if it helps me interview students that are important to me':
+            elif response.lower() == 'ifithelpsmeinterviewstudentsthatareimportanttome':
                 out_array[count] = 1
-            elif response.lower() == 'if it helps the department ...':
+            elif response.lower() == 'ifithelpsthedepartment...':
                 out_array[count] = 0
             else:
                 raise ValueError('Response unknown')
@@ -1525,11 +1616,6 @@ class input_checker:
             self.mm.STUDENT_PREF,
             self.mm.FACULTY_PREF,
             self.mm.TIMES_NAME,
-            self.mm.FACULTY_TRACK_FILE_NAME,
-            self.mm.STUDENT_TRACK_FILE_NAME,
-            self.mm.FACULTY_SIMILARITY_FILE_NAME,
-            self.mm.IS_RECRUITING_FILE_NAME,
-            self.mm.LUNCH_FILE_NAME,
             self.mm.FACULTY_AVAILABILITY_NAME,
             self.mm.STUDENT_AVAILABILITY_NAME]
 
@@ -1553,8 +1639,11 @@ class input_checker:
         if not self.check_bool(self.mm.USE_RECRUITING):
             raise ValueError('USE_RECRUITING' + ' should be a bool')
 
-        if not self.check_bool(self.mm.USE_AVAILABILITY):
-            raise ValueError('USE_AVAILABILITY' + ' should be a bool')
+        if not self.check_bool(self.mm.USE_STUDENT_AVAILABILITY):
+            raise ValueError('USE_STUDENT_AVAILABILITY' + ' should be a bool')
+            
+        if not self.check_bool(self.mm.USE_FACULTY_AVAILABILITY):
+            raise ValueError('USE_FACULTY_AVAILABILITY' + ' should be a bool')
 
         if not self.check_bool(self.mm.USE_FACULTY_SIMILARITY):
             raise ValueError('USE_FACULTY_SIMILARITY' + ' should be a bool')
