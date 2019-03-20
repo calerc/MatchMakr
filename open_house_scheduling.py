@@ -113,12 +113,12 @@ class match_maker():
 
         # Penalize the need to work over lunch
         self.USE_WORK_LUNCH = True
-        self.LUNCH_PENALTY = 10000     # Range [0, Inf), suggested = 10
+        self.LUNCH_PENALTY = 50000     # Range [0, Inf), suggested = 10
         self.LUNCH_PERIOD = 4       # Range [0, self.NUM_INTERVIEWS]
 
         # Give recruiting faculty an advantage over non-recruiting faculty
         self.USE_RECRUITING = True
-        self.RECRUITING_WEIGHT = 10000     # Range [0, Inf), suggested = 200
+        self.RECRUITING_WEIGHT = 30000     # Range [0, Inf), suggested = 200
         
         # If some people are not available for some (or all) interviews, use
         # this
@@ -134,14 +134,14 @@ class match_maker():
         # choosing interview matches that may be good, but that were not
         # requested
         self.USE_TRACKS = True
-        self.TRACK_WEIGHT = 1           # Range [0, Inf), suggested = 1
+        self.TRACK_WEIGHT = 30000           # Range [0, Inf), suggested = 1
 
         # When interviewers are similar to the interviewers that are "first choices"
         # for the interviewees, they are given a boost in the objective function
         # if the they were not chosen by the interviewee but the interviewee needs
         # more interviews
         self.USE_FACULTY_SIMILARITY = True
-        self.FACULTY_SIMILARITY_WEIGHT = 2  # Range [0, Inf), suggested = 2
+        self.FACULTY_SIMILARITY_WEIGHT = 30000  # Range [0, Inf), suggested = 2
         # Number of similar faculty objective scores to boost, range [0,
         # self.num_faculty), suggested = 5
         self.NUM_SIMILAR_FACULTY = 5
@@ -184,7 +184,7 @@ class match_maker():
 
         # Set the column width (# characters) for printing names to the
         # schedules
-        self.COLUMN_WIDTH = 22
+        self.COLUMN_WIDTH = 25
 
         # An arbitrary small constant to help with numerical stability
         self.A_SMALL_CONSTANT = 1E-10
@@ -770,6 +770,7 @@ class match_maker():
         # Calculate the objective matrix
         self.calc_objective_matrix()
 
+
     '''
         Read requests from human-readable format
         Rows:
@@ -1246,6 +1247,14 @@ class match_maker():
         # Make the folder, if it doesn't exist
         if not path.exists(path.join(self.PATH, folder_name)):
             makedirs(path.join(self.PATH, folder_name))
+            
+        # Get the thresholds for determining strength of match
+        # The strong threshold is chosen so that, if one person chooses a
+        # second, but the second doesn't choose the first, the match will only 
+        # be moderate (approximately)
+        strong_threshold = ((self.MAX_INTERVIEWS) ** self.CHOICE_EXPONENT) * 50
+        moderate_threshold = ((0.25 * self.MAX_INTERVIEWS) ** self.CHOICE_EXPONENT) * 100
+        
 
         # Print the results
         for count, name in enumerate(names1):
@@ -1291,28 +1300,16 @@ class match_maker():
                         # there is "always a benefit"
                         obj = objective[count][i]
 
-                        if obj < 1:
-                            obj = 1
-                        else:
-                            try:
-                                obj = int(np.log10(obj))
-                            except BaseException:
-                                warnings.warn('NaN problem for '
-                                              + name + ', obj = '
-                                              + str(obj))
-                                obj = 1
+                        
 
-                        if obj < 1:
-                            obj = 1
-
-                        if obj == 1:
+                        if obj < moderate_threshold:
                             if schedule[count, i] == 'Free':
                                 match_string = 'Free'
                             else:
                                 match_string = 'Informational Interview'
-                        elif obj >= 2 and obj < 4:
+                        elif obj >= moderate_threshold and obj <= strong_threshold:
                             match_string = 'Moderate Match'
-                        elif obj >= 4:
+                        elif obj > strong_threshold:
                             match_string = 'Strong Match'
 
                         file.writelines(np.array_str(times[i]) + sep_string
