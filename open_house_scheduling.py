@@ -31,8 +31,8 @@ import multiprocessing
         Allows faculty to request no interviews during lunch
         Give recruiting faculty an advantage in who they choose
         Outputs a schedule with a time vector read from a csv
-        Accepts penalty for empty interview slots
-        Accepts a hard limit to maximum number of interviews
+        Accepts penalty for empty lots
+        Accepts a hard limit to maximum number of views
         Accepts a hard limit to minimum number of interviews
         Can print preference number to schedules (for debugging)
         Accepts "not available" slots
@@ -50,12 +50,8 @@ import multiprocessing
         Code function:
             CREATE GOOGLE SURVEYS
             FREEZE
-            Make seperate results folder
-            Make output log
-            Make summary folder
-            Print faculty names nicely
+            Fix line endings
             Output pdf file
-            Get field length of output dynamically
             Create batch emailer
             Move names to load names
             Alphabetize functions
@@ -192,10 +188,6 @@ class match_maker():
         # Initialize empty variables for use later
         self.student_names = []
         self.faculty_names = []
-
-        # Set the column width (# characters) for printing names to the
-        # schedules
-        self.COLUMN_WIDTH = 25
 
         # An arbitrary small constant to help with numerical stability
         self.A_SMALL_CONSTANT = 1E-10
@@ -542,7 +534,7 @@ class match_maker():
             else:
                 matches = []
 
-            self.faculty_suggest_matches[p] = self.student_names[matches]
+            self.faculty_suggest_matches[p] = self.nice_student_names[matches]
 
         # Find good matches for students
         for s in self.all_students:
@@ -594,7 +586,7 @@ class match_maker():
             else:
                 matches = []
 
-            self.stud_suggest_matches[s] = self.faculty_names[matches]
+            self.stud_suggest_matches[s] = self.nice_faculty_names[matches]
 
     '''
         Check if an integer is odd
@@ -855,10 +847,15 @@ class match_maker():
                 
         # Match the names nicely
         faculty_col = np.where(faculty_match_data[0] == 'Full Name')[0][0]
-        self.nice_faculty_names = faculty_match_data[1:, faculty_col]
+        self.nice_faculty_names = np.copy(faculty_match_data[1:, faculty_col])
         
         student_col = np.where(stud_match_data[0] == 'Full Name')[0][0]
-        self.nice_student_names = stud_match_data[1:, student_col]
+        self.nice_student_names = np.copy(stud_match_data[1:, student_col])
+        
+        all_names = np.concatenate((self.nice_faculty_names,
+                                    self.nice_student_names))
+        lengths = [len(name) for name in all_names]
+        self.max_name_length = np.max(lengths) + 2    # column width for printing schedules
         
         # Remove characters that cause trouble
         faculty_match_data = self.remove_characters(faculty_match_data)
@@ -954,6 +951,12 @@ class match_maker():
 
         # Extract the preferences
         faculty_col, student_col = self.get_pref_col(faculty_match_data, stud_match_data)         
+        
+        if len(faculty_col) == 0:
+            raise ValueError('Faculty preference data not found')
+        if len(student_col) == 0:
+            raise ValueError('Faculty preference data not found')
+            
         student_pref = np.transpose(stud_match_data[1:, student_col.astype(int)])
         faculty_pref = np.transpose(faculty_match_data[1:, faculty_col.astype(int)])
 
@@ -1295,7 +1298,7 @@ class match_maker():
                 found_match = False
                 while s < self.num_students and not found_match:
                     if self.results[i][s][p] == 1:
-                        temp_list.append(self.student_names[s])
+                        temp_list.append(self.nice_student_names[s])
                         found_match = True
                         temp_objective[i] = self.objective_matrix[i, s, p]
                     s += 1
@@ -1305,7 +1308,7 @@ class match_maker():
             faculty_objective[p] = temp_objective
 
         self.print_schedules('Faculty', 'faculty_schedules',
-                             self.faculty_names, self.faculty_schedule,
+                             self.nice_faculty_names, self.faculty_schedule,
                              self.faculty_suggest_matches, faculty_objective)
 
         # Interview - Student Schedule
@@ -1319,7 +1322,7 @@ class match_maker():
                 found_match = False
                 while p < self.num_faculty and not found_match:
                     if self.results[i][s][p] == 1:
-                        temp_list.append(self.faculty_names[p])
+                        temp_list.append(self.nice_faculty_names[p])
                         found_match = True
                         temp_objective[i] = self.objective_matrix[i, s, p]
                     p += 1
@@ -1329,7 +1332,7 @@ class match_maker():
             student_objective[s] = temp_objective
 
         self.print_schedules('Student', 'student_schedules',
-                             self.student_names, self.student_schedule,
+                             self.nice_student_names, self.student_schedule,
                              self.stud_suggest_matches, student_objective)
 
         # Matches
@@ -1403,7 +1406,7 @@ class match_maker():
         for count, name in enumerate(names1):
 
             # Determine the file name
-            file_name = name + '.txt'
+            file_name = name.replace(' ', '').replace(',', '') + '.txt'
             file_name = path.join(self.RESULTS_PATH, folder_name, file_name)
 
             # Open the file for editing
@@ -1412,7 +1415,7 @@ class match_maker():
                 # Header
                 file.writelines(
                     person_string +
-                    ' interivew schedule for:         ' +
+                    ' interview schedule for:         ' +
                     name +
                     '\n')
                 file.writelines('\n')
@@ -1431,7 +1434,7 @@ class match_maker():
                             sep_char = '-'
                             sep_string = ' --------- '
 
-                        num_spaces_needed = self.COLUMN_WIDTH - \
+                        num_spaces_needed = self.max_name_length - \
                             len(schedule[count, i])
                         if num_spaces_needed > 0:
                             space_string = ' ' + sep_char * num_spaces_needed + ' '
@@ -1801,11 +1804,6 @@ class input_checker:
         if not self.check_positive_int(self.mm.EMPTY_PENALTY):
             raise ValueError(
                 'EMPTY_PENALTY' +
-                ' should be a non-negative integer')
-
-        if not self.check_positive_int(self.mm.COLUMN_WIDTH):
-            raise ValueError(
-                'COLUMN_WIDTH' +
                 ' should be a non-negative integer')
 
         # Check ranged ints
