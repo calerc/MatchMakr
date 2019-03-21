@@ -56,6 +56,8 @@ import multiprocessing
             Create batch emailer
             Move names to load names
             Alphabetize functions
+            Clean up PDF text maker if statment
+            Redo matches without redoing everything
 
         Code accessibility:
             CREATE GUI
@@ -333,7 +335,11 @@ class match_maker():
                                      :,
                                      requested_off[1]] == 1
         problems = np.where(not_respected == True)
-        faculty_names = self.faculty_names[problems[1]]
+        try:
+            faculty_names = self.faculty_names[requested_off[1][problems[0]]]
+        except:
+            raise ValueError('problems[1] out of bounds')
+            
         faculty_names = np.unique(faculty_names)
         
         self.print('')
@@ -350,8 +356,8 @@ class match_maker():
                                      requested_off[1],
                                      :] == 1
         problems = np.where(not_respected == True)
-        student_names = self.student_names[problems[1]]
-        student_names = np.unique(faculty_names)
+        student_names = self.student_names[requested_off[1][problems[0]]]
+        student_names = np.unique(student_names)
         
         self.print('Student schedules not respected')
         if len(student_names) > 0:
@@ -1385,6 +1391,10 @@ class match_maker():
             schedule,
             good_matches,
             objective):
+        
+        # Constants
+        HEADING_LAYER = 3
+        NAME_LAYER = 0
 
         # Get the interview times
         times = np.asarray(self.interview_times)
@@ -1413,41 +1423,32 @@ class match_maker():
             file_name = name.replace(' ', '').replace(',', '') + '.pdf'
             file_name = path.join(self.RESULTS_PATH, folder_name, file_name)
             
-            # Header
-            text = []
-            text.append(person_string +
-                    ' interview schedule for:         ' +
-                    name)
-            text.append(' ')
-            text.append(' ')
+            # Header            
+            text = np.empty((self.NUM_INTERVIEWS + 9, 3), dtype=object)            
+            text[NAME_LAYER, 0] = person_string + ' interview schedule for:'
+            text[NAME_LAYER, 2] = name            
+            
+            text[HEADING_LAYER, 0] = 'Time:'
+            text[HEADING_LAYER, 1] = 'Person:'
 
             # Schedule
-            if self.PRINT_PREFERENCE:
-                text.append(
-                    'Time:                     Person:                 Match Quality:')
-                for i in self.all_interviews:
-
-                    if self.is_odd(i):
-                        sep_char = '+'
-                        sep_string = '     '
-                    else:
-                        sep_char = '-'
-                        sep_string = '     '
-
-                    num_spaces_needed = self.max_name_length - \
-                        len(schedule[count, i])
-                    if num_spaces_needed > 0:
-                        space_string = ' ' + sep_char * num_spaces_needed + ' '
-                    else:
-                        space_string = ' ' + ' '
-
+            layer_num = HEADING_LAYER
+            for i in self.all_interviews:
+                layer_num += 1
+                
+                # Print times and matches
+                text[layer_num, 0] = np.array_str(times[i])
+                text[layer_num, 1] = schedule[count, i]
+                
+                # Print match quality, if desired
+                if self.PRINT_PREFERENCE:
+                    text[HEADING_LAYER, 2] = 'Match Quality:'
+                    
                     # Change the objective value to something easier to understand
                     # Also, make it strictly positive so that it looks like
                     # there is "always a benefit"
                     obj = objective[count][i]
-
-                    
-
+    
                     if obj < moderate_threshold:
                         if schedule[count, i] == 'Free':
                             match_string = 'Free'
@@ -1457,39 +1458,20 @@ class match_maker():
                         match_string = 'Moderate Match'
                     elif obj > strong_threshold:
                         match_string = 'Strong Match'
+                    
+                    text[layer_num, 2] = match_string
 
-                    text.append(np.array_str(times[i]) + sep_string
-                                    + schedule[count, i] + space_string
-                                    + match_string + ' ')
-            else:
-                text.append('Time:                     Person:')
-                for i in self.all_interviews:
-
-                    if self.is_odd(i):
-                        sep_string = '     '
-                    else:
-                        sep_string = '     '
-
-                    text.append(np.array_str(times[i]) + sep_string
-                                    + schedule[count, i]
-                                    + ' ')
 
             # Suggested matches
-            text.append(' ')
-            text.append(' ')
-            text.append(
-                'During the open interview periods, we suggest you meet with:')
+            text[layer_num + 3, 0] = 'During the open interview periods, we suggest you meet with:'
 
             for match_count, match in enumerate(good_matches[count]):
-                if match_count == 0:
-                    text.append(match)
-                else:
-                    text.append(match)
-
-            text.append('')
-            text.append('')
-            
-        pw.make_pdf_file(file_name, text)
+                text[layer_num + match_count + 4, 1] = match
+        
+            text[text == None] = ''
+            # pw = pdf_writer()
+            chart_limits = np.asarray([HEADING_LAYER + 1, layer_num])
+            pw.make_pdf_file(file_name, text, chart_limits)
 
     '''
         Randomize preferences for debuggning purposes
@@ -1846,19 +1828,56 @@ class pdf_writer():
         
         self.POINT = 1
         self.INCH = 72
+        self.FONT_SIZE = 12
+        self.COL_START = [1 * self.INCH,
+                          3.0 * self.INCH,
+                          5.5 * self.INCH]
+        self.RECTANGLE_END = (8.5 - 1) * self.INCH
+        self.TEXT_HEIGHT = 14 * self.POINT
+
         
-    def make_pdf_file(self, output_filename, text):
+    def make_pdf_file(self, output_filename, text, chart_lines):
         
         c = canvas.Canvas(output_filename, pagesize=(8.5 * self.INCH, 11 * self.INCH))
         c.setStrokeColorRGB(0,0,0)
         c.setFillColorRGB(0,0,0)
-        c.setFont("Helvetica", 12 * self.POINT)
+        c.setFont("Helvetica", self.FONT_SIZE * self.POINT)
         v = 10 * self.INCH
-        for subtline in text:
-            c.drawString( 1 * self.INCH, v, subtline )
-            v -= 12 * self.POINT
+        for line_num, line in enumerate(text):
+            
+            # Hightlight alternating lines
+            if (line_num >= chart_lines[0] and
+                line_num <= chart_lines[1]):
+                
+                if (line_num - chart_lines[0]) % 2 == 0:
+                    c.setFillColorRGB(0.9, 0.9, 0.9) 
+                    c.rect(self.COL_START[0],
+                           v - 2 * self.POINT,
+                           self.RECTANGLE_END - self.COL_START[0],
+                           self.TEXT_HEIGHT,
+                           stroke=0,
+                           fill=1)
+            
+            # Write the text
+            c.setFillColorRGB(0, 0, 0)
+            for col_num, col in enumerate(line):
+                string = self.clean_string(col)
+                c.drawString(self.COL_START[col_num], v, string)
+                
+            # Find the height of the next line of text
+            v -= self.TEXT_HEIGHT
+            
+        # Create the file
         c.showPage()
         c.save()
+        
+    def clean_string(self, string):
+        
+        string = string.replace('[', '')
+        string = string.replace(']', '')
+        string = string.replace("'", '')
+        
+        return string
 
 
 if __name__ == '__main__':
