@@ -5,6 +5,7 @@ import sys
 from os import path, makedirs
 from ortools.sat import sat_parameters_pb2
 from ortools.sat.python import cp_model
+from reportlab.pdfgen import canvas
 import numpy as np
 import csv
 import warnings
@@ -1401,93 +1402,94 @@ class match_maker():
         strong_threshold = ((self.MAX_INTERVIEWS) ** self.CHOICE_EXPONENT) * 50
         moderate_threshold = ((0.25 * self.MAX_INTERVIEWS) ** self.CHOICE_EXPONENT) * 100
         
+        # Initialize the PDF file
+        pw = pdf_writer()
+#        output = PdfFileWriter
 
         # Print the results
         for count, name in enumerate(names1):
 
             # Determine the file name
-            file_name = name.replace(' ', '').replace(',', '') + '.txt'
+            file_name = name.replace(' ', '').replace(',', '') + '.pdf'
             file_name = path.join(self.RESULTS_PATH, folder_name, file_name)
-
-            # Open the file for editing
-            with open(file_name, 'w') as file:
-
-                # Header
-                file.writelines(
-                    person_string +
+            
+            # Header
+            text = []
+            text.append(person_string +
                     ' interview schedule for:         ' +
-                    name +
-                    '\n')
-                file.writelines('\n')
-                file.writelines('\n')
+                    name)
+            text.append(' ')
+            text.append(' ')
 
-                # Schedule
-                if self.PRINT_PREFERENCE:
-                    file.writelines(
-                        'Time:                     Person:                 Match Quality:\n')
-                    for i in self.all_interviews:
+            # Schedule
+            if self.PRINT_PREFERENCE:
+                text.append(
+                    'Time:                     Person:                 Match Quality:')
+                for i in self.all_interviews:
 
-                        if self.is_odd(i):
-                            sep_char = '+'
-                            sep_string = ' +++++++++ '
-                        else:
-                            sep_char = '-'
-                            sep_string = ' --------- '
-
-                        num_spaces_needed = self.max_name_length - \
-                            len(schedule[count, i])
-                        if num_spaces_needed > 0:
-                            space_string = ' ' + sep_char * num_spaces_needed + ' '
-                        else:
-                            space_string = ' ' + ' '
-
-                        # Change the objective value to something easier to understand
-                        # Also, make it strictly positive so that it looks like
-                        # there is "always a benefit"
-                        obj = objective[count][i]
-
-                        
-
-                        if obj < moderate_threshold:
-                            if schedule[count, i] == 'Free':
-                                match_string = 'Free'
-                            else:
-                                match_string = 'Informational Interview'
-                        elif obj >= moderate_threshold and obj <= strong_threshold:
-                            match_string = 'Moderate Match'
-                        elif obj > strong_threshold:
-                            match_string = 'Strong Match'
-
-                        file.writelines(np.array_str(times[i]) + sep_string
-                                        + schedule[count, i] + space_string
-                                        + match_string + '\n')
-                else:
-                    file.writelines('Time:                     Person:\n')
-                    for i in self.all_interviews:
-
-                        if self.is_odd(i):
-                            sep_string = ' +++++++++ '
-                        else:
-                            sep_string = ' --------- '
-
-                        file.writelines(np.array_str(times[i]) + sep_string
-                                        + schedule[count, i]
-                                        + '\n')
-
-                # Suggested matches
-                file.writelines('\n')
-                file.writelines('\n')
-                file.writelines(
-                    'During the open interview periods, we suggest you meet with: \n')
-
-                for match_count, match in enumerate(good_matches[count]):
-                    if match_count == 0:
-                        file.writelines(match)
+                    if self.is_odd(i):
+                        sep_char = '+'
+                        sep_string = '     '
                     else:
-                        file.writelines('; ' + match)
+                        sep_char = '-'
+                        sep_string = '     '
 
-                file.writelines('\n')
-                file.writelines('\n')
+                    num_spaces_needed = self.max_name_length - \
+                        len(schedule[count, i])
+                    if num_spaces_needed > 0:
+                        space_string = ' ' + sep_char * num_spaces_needed + ' '
+                    else:
+                        space_string = ' ' + ' '
+
+                    # Change the objective value to something easier to understand
+                    # Also, make it strictly positive so that it looks like
+                    # there is "always a benefit"
+                    obj = objective[count][i]
+
+                    
+
+                    if obj < moderate_threshold:
+                        if schedule[count, i] == 'Free':
+                            match_string = 'Free'
+                        else:
+                            match_string = 'Informational Interview'
+                    elif obj >= moderate_threshold and obj <= strong_threshold:
+                        match_string = 'Moderate Match'
+                    elif obj > strong_threshold:
+                        match_string = 'Strong Match'
+
+                    text.append(np.array_str(times[i]) + sep_string
+                                    + schedule[count, i] + space_string
+                                    + match_string + ' ')
+            else:
+                text.append('Time:                     Person:')
+                for i in self.all_interviews:
+
+                    if self.is_odd(i):
+                        sep_string = '     '
+                    else:
+                        sep_string = '     '
+
+                    text.append(np.array_str(times[i]) + sep_string
+                                    + schedule[count, i]
+                                    + ' ')
+
+            # Suggested matches
+            text.append(' ')
+            text.append(' ')
+            text.append(
+                'During the open interview periods, we suggest you meet with:')
+
+            for match_count, match in enumerate(good_matches[count]):
+                if match_count == 0:
+                    text.append(match)
+                else:
+                    text.append(match)
+
+            text.append('')
+            text.append('')
+            
+        pw.make_pdf_file(file_name, text)
 
     '''
         Randomize preferences for debuggning purposes
@@ -1838,6 +1840,26 @@ class input_checker:
             warnings.warn(
                 'We detected that AVAILABILITY_VALUE does not equal -1 * 5000.  This can cause issues.')
     
+class pdf_writer():
+    
+    def __init__(self):
+        
+        self.POINT = 1
+        self.INCH = 72
+        
+    def make_pdf_file(self, output_filename, text):
+        
+        c = canvas.Canvas(output_filename, pagesize=(8.5 * self.INCH, 11 * self.INCH))
+        c.setStrokeColorRGB(0,0,0)
+        c.setFillColorRGB(0,0,0)
+        c.setFont("Helvetica", 12 * self.POINT)
+        v = 10 * self.INCH
+        for subtline in text:
+            c.drawString( 1 * self.INCH, v, subtline )
+            v -= 12 * self.POINT
+        c.showPage()
+        c.save()
+
 
 if __name__ == '__main__':
 
