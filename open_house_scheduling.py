@@ -1068,12 +1068,25 @@ class match_maker():
     def print(self, message, sep_char=''):
         
         if type(message) == str:
-            print(message, sep=sep_char, flush=True)   
-            self.fb.update_text(message)
-            self.log_file.writelines(message + '\n')
+            print(message, sep=sep_char, flush=True)
+            try:
+                self.fb.update_text(message)
+            except:
+                pass
+            
+            try:
+                self.log_file.writelines(message + '\n')
+            except:
+                self.log_file.writelines('?????? List Message could not be printed ??????\n')
+                
         elif type(message) == list and type(message[0]) == str:
-            self.fb.update_text(message)
+            try:
+                self.fb.update_text(message)
+            except:
+                pass
+            
             print(*message, sep=sep_char, flush=True)
+            
             try:
                 for line in message:
                     self.log_file.writelines(line + '\n')
@@ -1100,8 +1113,11 @@ class match_maker():
                     self.log_file.writelines('?????? Array Message could not be printed ??????\n')
                     
             for line in message:
-                line_2_print = str(line)
-                self.fb.update_text(line_2_print)
+                line_2_print = str(line)                
+                try:
+                    self.fb.update_text(line_2_print)
+                except:
+                    pass
 
 
     ''' Print all of the attributes '''
@@ -1607,9 +1623,17 @@ class VarArrayAndObjectiveSolutionPrinter(cp_model.CpSolverSolutionCallback):
 
         # Print objective value
         text = 'Solution %i' % self.__solution_count
-        self.match_maker.print(text)
+        try:
+            self.match_maker.print(text)
+        except Exception as e:
+            print('Error!')
+            print(e)
         text = '  objective value = %i' % self.ObjectiveValue()
-        self.match_maker.print(text)
+        try:
+            self.match_maker.print(text)
+        except Exception as e:
+            print('Error!')
+            print(e)
 
         # Determine what matches were made
         if self.CHECK_MATCHES and (
@@ -2177,8 +2201,7 @@ class feedback():
         
         # Make master form
         self.master = tk.Tk()
-        tk_title(self.master, 'MatchMakr - Feedback') 
-        
+        tk_title(self.master, 'MatchMakr - Feedback')
 
         self.label = st.ScrolledText(self.master, width=50, height = self.NUM_TEXT_LINES)#, height=self.NUM_TEXT_LINES)
 
@@ -2189,11 +2212,12 @@ class feedback():
         
     def replace_text(self, text_box, new_text):
         text_2_print = new_text + '\n'
-        text_box.insert(tk.END, text_2_print)        
+        text_box.insert(tk.END, text_2_print)
+        text_box.see(tk.END)
         
     def update_text(self, text):
         self.text.append(text)
-        self.replace_text(self.label, text)            
+        self.replace_text(self.label, text)          
         self.master.update_idletasks()
 
 
