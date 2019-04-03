@@ -1,6 +1,7 @@
 from __future__ import division
 from __future__ import print_function
 import tkinter as tk
+from tkinter import filedialog
 
 import sys
 from os import path, makedirs
@@ -50,7 +51,6 @@ import multiprocessing
             ENSURE THAT THE DOCUMENTATION IS UP TO SNUFF
 
         Code function:
-            CREATE GOOGLE SURVEYS
             FREEZE
             Create batch emailer
             Alphabetize functions
@@ -2001,13 +2001,13 @@ class gui():
         tk.Checkbutton(self.master, text="Print suggestions for additional interviews",
                     variable=self.var_suggestions).grid(row=21, column=check_button_column, sticky=tk.W)
         tk.Checkbutton(self.master, text="Check if preferences are met (slower)",
-                    variable=self.var_check_preferences).grid(row=22, column=check_button_column, sticky=tk.W)   
+                    variable=self.var_check_preferences).grid(row=20, column=check_button_column, sticky=tk.W)   
         tk.Checkbutton(self.master, text="Print match quality for students",
                     variable=self.var_stud_match_qualtiy).grid(row=23, column=check_button_column, sticky=tk.W)
         tk.Checkbutton(self.master, text="Print match quality for faculty",
                     variable=self.var_faculty_match_quality).grid(row=24, column=check_button_column, sticky=tk.W)
         tk.Checkbutton(self.master, text="Use ranked preferences",
-                    variable=self.var_ranked_pref).grid(row=10, column=check_button_column, sticky=tk.W)
+                    variable=self.var_ranked_pref).grid(row=9, column=check_button_column, sticky=tk.W)
         tk.Checkbutton(self.master, text="Use student availability",
                     variable=self.var_stud_avail).grid(row=5, column=check_button_column, sticky=tk.W)
         tk.Checkbutton(self.master, text="Use faculty availability",
@@ -2092,17 +2092,17 @@ class gui():
                     textvariable=self.max_interviews).grid(row=8, column=tk.Entry_column, sticky=tk.W)
         
         tk.Label(self.master,
-                    text='Faculty preference (ints [0, 100]):').grid(row=9, column=label_column, sticky=tk.E)
+                    text='Maximum objective value (int > 0):').grid(row=9, column=label_column, sticky=tk.E)
         tk.Entry(self.master,
-                    textvariable=self.faculty_advantage).grid(row=9, column=tk.Entry_column, sticky=tk.W)
+                    textvariable=self.max_ranking).grid(row=9, column=tk.Entry_column, sticky=tk.W)
         
         tk.Label(self.master,
-                    text='Maximum number of matches to consider (int > 0):').grid(row=10, column=label_column, sticky=tk.E)
+                    text='Faculty preference weight (ints [0, 100]):').grid(row=10, column=label_column, sticky=tk.E)
         tk.Entry(self.master,
-                    textvariable=self.max_ranking).grid(row=10, column=tk.Entry_column, sticky=tk.W)
+                    textvariable=self.faculty_advantage).grid(row=10, column=tk.Entry_column, sticky=tk.W)
         
         tk.Label(self.master,
-                    text='Preference given to first choice (int > 0):').grid(row=11, column=label_column, sticky=tk.E)
+                    text='Objective function exponent (int > 0):').grid(row=11, column=label_column, sticky=tk.E)
         tk.Entry(self.master,
                     textvariable=self.choice_exponent).grid(row=11, column=tk.Entry_column, sticky=tk.W)
         
@@ -2112,61 +2112,71 @@ class gui():
                     textvariable=self.lunch_penalty).grid(row=12, column=tk.Entry_column, sticky=tk.W)
         
         tk.Label(self.master,
-                    text='Interview period containing lunch (int > 0):').grid(row=13, column=label_column, sticky=tk.E)
+                    text='Faculty similarity advantage (int > 0):').grid(row=13, column=label_column, sticky=tk.E)
         tk.Entry(self.master,
-                    textvariable=self.lunch_period).grid(row=13, column=tk.Entry_column, sticky=tk.W)
+                    textvariable=self.faculty_sim_weight).grid(row=13, column=1, sticky=tk.W)
         
         tk.Label(self.master,
-                    text='Recruiting faculty advantage (int > 0):').grid(row=14, column=label_column, sticky=tk.E)
+                    text='Track advantage (int > 0):').grid(row=14, column=label_column, sticky=tk.E)
         tk.Entry(self.master,
-                    textvariable=self.recruiting_weight).grid(row=14, column=tk.Entry_column, sticky=tk.W)
-         
+                    textvariable=self.track_weight).grid(row=14, column=1, sticky=tk.W)
+        
         tk.Label(self.master,
-                    text='Maximum solver time in seconds (int > 0):').grid(row=15, column=label_column, sticky=tk.E)
+                    text='Recruiting faculty advantage (int > 0):').grid(row=15, column=label_column, sticky=tk.E)
         tk.Entry(self.master,
-                    textvariable=self.max_solver_time_seconds).grid(row=15, column=tk.Entry_column, sticky=tk.W)
+                    textvariable=self.recruiting_weight).grid(row=15, column=tk.Entry_column, sticky=tk.W)
         
         tk.Label(self.master,
                     text='Penalty for empty interview slots \n(int > 0, AVOID USING):').grid(row=16, column=label_column, sticky=tk.E)
         tk.Entry(self.master,
                     textvariable=self.empty_penalty).grid(row=16, column=tk.Entry_column, sticky=tk.W)
         
-        tk.Label(self.master,
-                    text='Track advantage (int > 0):').grid(row=17, column=label_column, sticky=tk.E)
-        tk.Entry(self.master,
-                    textvariable=self.track_weight).grid(row=17, column=1, sticky=tk.W)
+        
         
         tk.Label(self.master,
-                    text='Faculty similarity advantage (int > 0):').grid(row=18, column=label_column, sticky=tk.E)
+                    text='Interview period containing lunch (int > 0):').grid(row=17, column=label_column, sticky=tk.E)
         tk.Entry(self.master,
-                    textvariable=self.faculty_sim_weight).grid(row=18, column=1, sticky=tk.W)
+                    textvariable=self.lunch_period).grid(row=17, column=tk.Entry_column, sticky=tk.W)     
+
+        tk.Label(self.master,
+                    text='Number of similar faculty to match (int > 0):').grid(row=18, column=label_column, sticky=tk.E)
+        tk.Entry(self.master,
+                    textvariable=self.num_similar_faculty).grid(row=18, column=1, sticky=tk.W)
         
         tk.Label(self.master,
-                    text='Number of similar faculty to match (int > 0):').grid(row=19, column=label_column, sticky=tk.E)
+                    text='Number of interviews to suggest (int > 0):').grid(row=19, column=label_column, sticky=tk.E)
         tk.Entry(self.master,
-                    textvariable=self.num_similar_faculty).grid(row=19, column=1, sticky=tk.W)
-        
+                    textvariable=self.num_suggestions).grid(row=19, column=1, sticky=tk.W)
+          
+         
         tk.Label(self.master,
-                    text='Number of preferences to check \n during matching (int > 0):').grid(row=20, column=label_column, sticky=tk.E)
+                    text='Maximum solver time in seconds (int > 0):').grid(row=20, column=label_column, sticky=tk.E)
         tk.Entry(self.master,
-                    textvariable=self.num_pref_2_check).grid(row=20, column=1, sticky=tk.W)
-        
+                    textvariable=self.max_solver_time_seconds).grid(row=20, column=tk.Entry_column, sticky=tk.W)
+                
         tk.Label(self.master,
-                    text='Number of interviews to suggest (int > 0):').grid(row=21, column=label_column, sticky=tk.E)
+                    text='Number of preferences to check \n during matching (int > 0):').grid(row=21, column=label_column, sticky=tk.E)
         tk.Entry(self.master,
-                    textvariable=self.num_suggestions).grid(row=21, column=1, sticky=tk.W)
-        
+                    textvariable=self.num_pref_2_check).grid(row=21, column=1, sticky=tk.W)
+                
         tk.Label(self.master,
                     text='Number of iterations to run before checking\nprogress  (int > 0, big = slow):').grid(row=22, column=label_column, sticky=tk.E)
         tk.Entry(self.master,
                     textvariable=self.check_frequency).grid(row=22, column=1, sticky=tk.W)
         
-        # Run tk.Checkbutton
-        tk.Checkbutton_column = 4
-        tk.Button(self.master, text='Run', command=self.start_matchmaking).grid(row=24, column = tk.Checkbutton_column)
+        # Buttons
+        tk.button_column = 4
+#        tk.Button(self.master, text='Test', command=self.test).grid(row=21, column = tk.button_column)
+        tk.Button(self.master, text='Save Defaults', command=self.save_defaults).grid(row=22, column = tk.button_column)
+        tk.Button(self.master, text='Load Defaults', command=self.load_defaults).grid(row=23, column = tk.button_column)
+        tk.Button(self.master, text='Run', command=self.start_matchmaking).grid(row=24, column = tk.button_column)
         
         # Mainloop
         self.master.mainloop()
+        
+#    def test(self):
+#        print(self.min_interviews.get())
+
     
     def assign_parameters(self):
         
@@ -2215,6 +2225,47 @@ class gui():
         if not path.isdir(self.mm.RESULTS_PATH):
             makedirs(self.mm.RESULTS_PATH)
 
+
+    def save_defaults(self):
+        filename = filedialog.asksaveasfilename(initialdir=self.path,
+                                                title = "Save defaults",
+                                                filetypes = (("default files","*.def"),
+                                                             ("all files","*.*")))
+        if filename == '':
+            return
+        
+        with open(filename, 'w') as csvfile:
+            
+            writer = csv.writer(csvfile, delimiter=',')
+            fields = dir(self)
+            
+            for field in fields:
+                atr = getattr(self, field)
+                if type(atr) == tk.BooleanVar or type(atr) == tk.StringVar or type(atr) == tk.IntVar:                        
+                    writer.writerow([field, atr.get()])
+                    
+        print('Saved: ' + filename)      
+        
+    def load_defaults(self):
+        
+        filename = filedialog.askopenfilename(initialdir=self.path,
+                                                title = "Load defaults",
+                                                filetypes = (("default files","*.def"),
+                                                             ("all files","*.*")))
+        if filename == '':
+            return
+        
+        with open(filename, 'r') as csvfile:
+            
+            reader = csv.reader(csvfile, delimiter=',')
+            
+            for line in reader:
+                atr = getattr(self, line[0])
+                atr.set(line[1])
+            
+        print('Data Loaded: ' + filename)
+        
+        self.master.update()
         
         
     def start_matchmaking(self):
