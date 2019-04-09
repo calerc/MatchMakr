@@ -52,9 +52,10 @@ import multiprocessing
 
         Code function:
             FREEZE
-            Create batch emailer
             Alphabetize functions
             Redo matches without redoing everything
+            Make the constants for weights normalized
+            Check if self.can_update is needed
 
         Code accessibility:
             CREATE GUI
@@ -67,8 +68,7 @@ import multiprocessing
     KNOWN BUGS:
         bin_needed = bin_needed[0][0] - IndexError: index 0 is out of bounds for axis 0 with size 0
             This doesn't affect fitting, but it won't allow for output
-'''
-
+'''      
 
 class match_maker():
 
@@ -258,10 +258,12 @@ class match_maker():
             for row in self.faculty_rank:
                 writer.writerow(row)
         
+    def calc_objective_matrix(self):
+        self.calc_objective_matrix_base()
         
     ''' Transform the data into objective matrix'''
     
-    def calc_objective_matrix(self):
+    def calc_objective_matrix_base(self):
 
         # Determine how to weight faculty preferences over student preferences
         alpha = self.FACULTY_ADVANTAGE
@@ -966,9 +968,10 @@ class match_maker():
         faculty_pref = np.transpose(faculty_match_data[1:, faculty_col.astype(int)])
 
         # Randomize preferences, if necessary
-        if self.RANDOMIZE_PREFERENCES:
-            stud_match_data = self.randomize_preferences(stud_match_data)
-            faculty_match_data = self.randomize_preferences(faculty_match_data)
+        # This code doesn't work and is no longer supported
+#        if self.RANDOMIZE_PREFERENCES:
+#            stud_match_data = self.randomize_preferences(stud_match_data)
+#            faculty_match_data = self.randomize_preferences(faculty_match_data)
 
         # Statistics
         self.num_students = len(student_names)
@@ -2271,10 +2274,357 @@ class gui():
     def start_matchmaking(self):
         self.assign_parameters()
         self.mm.main()        
+        
+''' Update matches if availability changes '''
+class re_match_maker(match_maker):
+    
+    def __init__(self, dir_name):        
+        self.dir_name = dir_name
+        super(re_match_maker, self).__init__()
+        
+        self.STUDENT_REMATCH_NAME = 'student_rematch.csv'
+        self.FACULTY_REMATCH_NAME = 'faculty_rematch.csv'
+        
+        self.check_file_available()
+        self.load_parameters()
+        
+    def convert_input(self, attribute):
+        
+        try:
+            # Int
+            converted_attribute = int(attribute)
+        except ValueError:
+            if attribute == str(True):
+                converted_attribute = True
+            elif attribute == str(False):
+                # Bool
+                converted_attribute = False
+            else:
+                # String
+                converted_attribute = attribute
+        
+        return converted_attribute
+    
+    def load_parameters(self):
+        
+        with open(path.join(self.dir_name, 'results', self.LOG_FILE_NAME), 'r') as logfile:
+            csvreader = csv.reader(logfile, delimiter='=')
+            
+            print('Loading Parameters...')
+            
+            for line in csvreader:
+                print(line)
+                if line[0] == '**************************************':
+                    break
+                
+                setattr(self, line[0].strip(), self.convert_input(line[1].strip()))
 
+        self.LOG_FILE_NAME = 'log_rematch.txt'
+
+                
+    def check_file_available(self):
+        
+        file_names = [self.STUDENT_REMATCH_NAME, self.FACULTY_REMATCH_NAME]
+        
+        for name in file_names:
+            full_name = path.join(self.dir_name, name)
+            if not path.isfile(full_name):
+                raise ValueError('File ' + full_name + ' does not exist')
+        
+                
+    def load_re_match_data(self):
+        
+        # Load the rematch data
+        self.student_rematch_bool = self.load_availability(self.STUDENT_REMATCH_NAME, self.num_students)[0]
+        self.faculty_rematch_bool = self.load_availability(self.FACULTY_REMATCH_NAME, self.num_faculty)[0]
+        
+        # Check if availability changed   
+        self.student_changed = np.where(self.student_rematch_bool != self.student_availability)[1]
+        if len(self.student_changed) == 0:
+            self.print("Student availability didn't change")
+            student_flag = False
+        else:
+            self.print('Student availability changed for:')
+            self.print(self.student_names[self.student_changed])
+            student_flag = True
+        
+        self.faculty_changed = np.where(self.faculty_rematch_bool != self.faculty_availability)[1]
+        if len(self.faculty_changed) == 0:
+            self.print("Faculty availability didn't change")
+            faculty_flag = False
+        else:
+            self.print('Faculty availability changed for:')
+            self.print(self.faculty_names[self.faculty_changed])
+            faculty_flag = True
+        
+        if not student_flag and not faculty_flag:
+            self.should_continue = False
+            return
+        
+        self.should_continue = True
+        
+        # Load the old matches
+        self.old_matches = self.load_matrix_data(path.join('results', 'matches.csv'))
+        self.old_matches = np.asarray(self.old_matches)
+        
+    
+    def calc_objective_matrix(self):
+
+        # Calculate the objective matrix, as in the original matchmaking
+        self.calc_objective_matrix_base()
+        
+    '''
+        Update the objective matrix so that students and faculty can only get
+        new matches that are as good as old matches
+    '''
+    
+    def update_objective_matrix(self):
+        
+        # Determine how good each match was
+        student_pref = self.student_pref.astype(int) * self.old_matches.astype(int)
+        faculty_pref = self.faculty_pref.astype(int) * self.old_matches.astype(int)
+        
+        # For each match, determine if better matches can be made
+        self.can_update = np.zeros((self.num_students, self.num_faculty))
+        self.do_not_update = np.zeros((self.num_students, self.num_faculty))
+        better_for_students = np.zeros((self.num_students, self.num_faculty))
+        better_for_faculty = np.zeros((self.num_students, self.num_faculty))
+        
+        for s in self.all_students:
+            for p in self.all_faculty:
+                
+                # Find faculty that would be better for the student
+                better_faculty_idx = np.where(self.student_pref[s, :] >= self.student_pref[s, p])
+                currently_unassigned = np.where(student_pref[s, :] == 0)
+                try:
+                    better_for_student = better_faculty_idx[np.where(np.in1d(better_faculty_idx, currently_unassigned))[0]]
+                except:
+                        a = 1
+                        
+                # Find students that would be better for the faculty
+                better_student_idx = np.where(self.faculty_pref[:, p] >= self.faculty_pref[s, p])
+                currently_unassigned = np.where(student_pref[s, :] == 0)
+                try:
+                    better_for_student = better_faculty_idx[np.where(np.in1d(better_faculty_idx, currently_unassigned))[0]]
+                except:
+                        a = 1
+                
+                # Find the faculty who want the student more than the current match
+                try:
+                    faculty_rankings = np.in1d(np.where(self.faculty_pref[s, better_for_student] >= self.faculty_pref[s, p]),
+                                               np.where(faculty_pref[:,s] == 0))
+                except:
+                    a = 1
+                    
+                if len(faculty_rankings) > 0:
+                    self.can_update[s, faculty_rankings] = 1
+                    self.can_update[s, p] = 1
+                else:
+                    self.do_not_update[s, p] = 1
+                    
+        # Ensure that slots that were previously unavailable get assigned to a new person
+        self.do_not_update[self.student_changed, :] = 0
+        self.do_not_update[:, self.faculty_changed] = 0
+    
+    
+    def main(self):
+        
+        # Check parameter validity
+        input_checker(self)        
+        
+        with open(path.join(self.RESULTS_PATH, self.LOG_FILE_NAME), 'w') as self.log_file:
+
+            # Log the attributes used to make the matches
+            self.print_atributes()
+            
+            # Creates the model.
+            model = cp_model.CpModel()
+    
+            # Get objective matrix
+            self.load_data()
+            self.load_re_match_data()
+            
+            if self.should_continue == False:
+                print('Exiting')
+                return
+            
+            self.update_objective_matrix()
+            self.load_parameters()
+            
+            
+            if not self.should_continue:
+                print('No changes in availability.  Exiting...')
+                return
+            
+            objective_matrix = self.objective_matrix
+    
+            # Creates interview variables.
+            # interview[(p, s, i)]: professor 'p' interviews student 's' for
+            # interview number 'i'
+            self.interview = {}
+            for p in self.all_faculty:
+                for s in self.all_students:
+                    for i in self.all_interviews:
+                        self.interview[(p, s, i)] = model.NewBoolVar(
+                            'interview_p%i_s%i_i%i' % (p, s, i))
+    
+            # Each student has no more than one interview at a time
+            for p in self.all_faculty:
+                for i in self.all_interviews:
+                    model.Add(sum(self.interview[(p, s, i)]
+                                  for s in self.all_students) <= 1)
+    
+            # Each professor has no more than one student per interview
+            for s in self.all_students:
+                for i in self.all_interviews:
+                    model.Add(sum(self.interview[(p, s, i)]
+                                  for p in self.all_faculty) <= 1)
+    
+            # No student is assigned to the same professor twice
+            for s in self.all_students:
+                for p in self.all_faculty:
+                    model.Add(sum(self.interview[(p, s, i)]
+                                  for i in self.all_interviews) <= 1)
+                    
+            # Constrain matches that must be made
+            for s in self.all_students:
+                for p in self.all_faculty:
+                    if self.do_not_update[s, p] == 1:
+                        model.Add(sum(self.interview[(p, s, i)]
+                                      for i in self.all_interviews) == self.old_matches[s, p])
+    
+            if self.USE_INTERVIEW_LIMITS:
+    
+                # Ensure that no student gets too many or too few interviews
+                for s in self.all_students:
+                    num_interviews_stud = sum(self.interview[(
+                        p, s, i)] for p in self.all_faculty for i in self.all_interviews)
+    
+                    # Set minimum number of interviews
+                    if not self.USE_STUDENT_AVAILABILITY:
+                        model.Add(self.MIN_INTERVIEWS <= num_interviews_stud)
+                    else:
+    
+                        num_slots_unavailable = sum(
+                            self.student_availability[:, s] == 0)
+    
+                        # If the person is available for more than half the interview
+                        # try not to penalize them for being unavailable.  Otherwise,
+                        # let them be penalized
+                        if num_slots_unavailable <= 0.5 * self.NUM_INTERVIEWS:
+                            model.Add(self.MIN_INTERVIEWS <= num_interviews_stud)
+                        elif num_slots_unavailable != self.NUM_INTERVIEWS:
+                            model.Add(self.MIN_INTERVIEWS - num_slots_unavailable
+                                      <= num_interviews_stud)
+                        # else:
+                        # we don't let them have interviews if they aren't
+                        # available
+    
+                    # Set maximum number of interviews
+                    model.Add(num_interviews_stud <= self.MAX_INTERVIEWS)
+    
+                # Ensure that no professor gets too many or too few interviews
+                for p in self.all_faculty:
+                    num_interviews_prof = sum(self.interview[(
+                        p, s, i)] for s in self.all_students for i in self.all_interviews)
+    
+                    # If the person is available for more than half the interview
+                    # try not to penalize them for being unavailable.  Otherwise,
+                    # let them be penalized
+                    if not self.USE_FACULTY_AVAILABILITY:
+                        model.Add(self.MIN_INTERVIEWS <= num_interviews_prof)
+                    else:
+    
+                        num_slots_unavailable = sum(
+                            self.faculty_availability[:, p] == 0)
+    
+                        if num_slots_unavailable <= 0.5 * self.NUM_INTERVIEWS:
+                            model.Add(self.MIN_INTERVIEWS <= num_interviews_prof)
+                        elif num_slots_unavailable != self.NUM_INTERVIEWS:
+                            model.Add(self.MIN_INTERVIEWS - num_slots_unavailable
+                                      <= num_interviews_prof)
+                        # else:
+                        # we don't let them have interviews if they aren't
+                        # available
+    
+                    # Set maximum number of interviews
+                    model.Add(num_interviews_prof <= self.MAX_INTERVIEWS)
+    
+            # Define the maximization of the objective
+            self.print('Building Maximization term...')
+            if self.EMPTY_PENALTY != 0:
+                model.Maximize(
+                    sum(objective_matrix[i][s][p] * self.interview[(p, s, i)]
+                        + self.EMPTY_PENALTY * self.interview[(p, s, i)]
+                        for p in self.all_faculty
+                        for s in self.all_students
+                        for i in self.all_interviews))
+            else:
+                model.Maximize(
+                    sum(objective_matrix[i][s][p] * self.interview[(p, s, i)]
+                        for p in self.all_faculty
+                        for s in self.all_students
+                        for i in self.all_interviews))
+    
+            # Creates the solver and solve.
+            self.print('Building Model...')
+            solver = cp_model.CpSolver()
+            solution_printer = VarArrayAndObjectiveSolutionPrinter(self)
+    
+            self.print('Setting up workers...')
+            self.get_cpu_2_use()
+            solver.parameters = sat_parameters_pb2.SatParameters(
+                num_search_workers=self.num_cpus)
+            solver.parameters.max_time_in_seconds = self.MAX_SOLVER_TIME_SECONDS
+    
+            self.print('Solving model...')
+            status = solver.SolveWithSolutionCallback(model, solution_printer)
+    
+            self.print(solver.StatusName(status))
+    
+            # Collect results
+            if solver.StatusName(status) == 'FEASIBLE' or solver.StatusName(
+                    status) == 'OPTIMAL':
+                results = np.empty(
+                    (self.NUM_INTERVIEWS,
+                     self.num_students,
+                     self.num_faculty))
+                for i in self.all_interviews:
+                    for p in self.all_faculty:
+                        for s in self.all_students:
+                            results[i][s][p] = solver.Value(
+                                self.interview[(p, s, i)])
+    
+                # Save the results
+                self.results = results
+                self.solver = solver
+                self.matches = np.sum(self.results, axis=0).astype(bool)
+    
+                # Convert the results to text and save as text files
+                self.matches_as_text()
+    
+                # Write the results to a file
+                self.print_numpy_arrays('results.csv', self.results)
+                np.savetxt(path.join(self.RESULTS_PATH, 'matches.csv'),
+                           self.matches, delimiter=",",
+                           fmt='%i')
+    
+                # Check the percentage of preferences met
+                self.check_preferences(self.matches)
+                self.check_lunch()
+                self.check_availability()
+    
+            else:
+                self.print('-------- Solver failed! --------')
 
 
 if __name__ == '__main__':
     
-    mm = match_maker()
-    g = gui(mm)
+    rm = re_match_maker("/media/veracrypt1/Users/Cale/Documents/Calers_Writing/PhD/GEC/scheduling_software/2019_data/processed_for_program")
+    rm.main()
+    
+#    mm = match_maker()
+#    mm.main()
+    
+#    mm = match_maker()
+#    g = gui(mm)
