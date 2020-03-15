@@ -13,6 +13,8 @@ import csv
 import warnings
 import multiprocessing
 
+from ipdb import set_trace
+
 
 
 
@@ -56,6 +58,10 @@ import multiprocessing
             Redo matches without redoing everything
             Make the constants for weights normalized
             Check if self.can_update is needed
+            Possibly set initial condition of optimizer by copying previous matches into variable being optimmized
+            Make time limit work
+            Don't suggest same match twice
+            Determine why objective matrix has some values equal to 0
 
         Code accessibility:
             CREATE GUI
@@ -79,16 +85,21 @@ class match_maker():
         ''' Constants '''
 
         # Files to load
-        self.PATH = "/media/veracrypt1/Users/Cale/Documents/Calers_Writing/PhD/GEC/scheduling_software/2019_data/processed_for_program"
+        self.PATH = "/media/veracrypt1/Users/Cale/Documents/Calers_Writing/PhD/GEC/scheduling_software/2020_data/processed_for_program"
         self.RESULTS_PATH = path.join(self.PATH, 'results')
-        self.STUDENT_PREF = "CWRU_BME_Open_House-Students.csv"
-        self.FACULTY_PREF = "CWRU_BME_Open_House-Faculty.csv"
+        self.STUDENT_PREF = "CWRU_BME_Open_House_-_Student_Survey.csv"
+        self.FACULTY_PREF = "CWRU_BME_Open_House_-_Faculty_Survey.csv"
         self.TIMES_NAME = "interview_times.csv"
         self.FACULTY_AVAILABILITY_NAME = 'faculty_availability.csv'
         self.STUDENT_AVAILABILITY_NAME = 'student_availability.csv'
         self.STUDENT_RANKING_FILE = 'student_ranking.csv'
         self.FACULTY_RANKING_FILE = 'faculty_ranking.csv'
         self.LOG_FILE_NAME = 'log.txt'
+        self.RESULTS_NAME = 'results.csv'
+        self.MATCHES_CSV_NAME = 'matches.csv'
+        self.MATCHES_TXT_NAME = 'matches.txt'
+        self.STUDENT_SCHEDULES_DIR = 'student_schedules'
+        self.FACULTY_SCHEDULES_DIR = 'faculty_schedules'
         
         # Make the necessary paths
         if not path.isdir(self.RESULTS_PATH):
@@ -106,7 +117,7 @@ class match_maker():
 
         # Give the faculty an advantage over students range[0, 100], 50 = no
         # advantage, 100 = students don't matter, 0 = faculty don't matter
-        self.FACULTY_ADVANTAGE = 70     # Range [0, Inf), suggested = 70
+        self.FACULTY_ADVANTAGE = 90     # Range [0, Inf), suggested = 70
 
         # Use ranked preferences instead of binary(want/don't want)
         self.USE_RANKING = True     # True if use preference order instead of binary
@@ -117,7 +128,7 @@ class match_maker():
         self.CHOICE_EXPONENT = 4
 
         # Penalize the need to work over lunch
-        self.USE_WORK_LUNCH = True
+        self.USE_WORK_LUNCH = False
         self.LUNCH_PENALTY = 50000     # Range [0, Inf), suggested = 10
         self.LUNCH_PERIOD = 4       # Range [0, self.NUM_INTERVIEWS]
 
@@ -127,7 +138,7 @@ class match_maker():
         
         # If some people are not available for some (or all) interviews, use
         # this
-        self.USE_STUDENT_AVAILABILITY = True
+        self.USE_STUDENT_AVAILABILITY = False
         self.USE_FACULTY_AVAILABILITY = True
         # This parameter probably does not need tweeked,
         # it is just a negative weight that adds a strong cost to making
@@ -165,8 +176,8 @@ class match_maker():
         # While matches are being made, choose how many times to check the first
         # self.NUM_PREFERENCES_2_CHECK choices.
         self.CHECK_MATCHES = True
-        # range [0, inf), suggested = 20 (when > 20, it can be slow)
-        self.CHECK_FREQUENCY = 20
+        # range [0, inf), suggested = 20 (when < 20, it can be slow)
+        self.CHECK_FREQUENCY = 100
 
         # Number of seconds to allow the match maker to run
         self.MAX_SOLVER_TIME_SECONDS = 180   # range [0, inf), suggested = 190
@@ -260,6 +271,7 @@ class match_maker():
         
     def calc_objective_matrix(self):
         self.calc_objective_matrix_base()
+        self.adjust_objective_matrix_availability()
         
     ''' Transform the data into objective matrix'''
     
@@ -313,6 +325,8 @@ class match_maker():
             self.objective_matrix[self.LUNCH_PERIOD, :, :] -= (
                 (2 - self.will_work_lunch) * self.LUNCH_PENALTY).astype(np.int64)
 
+    ''' Make the availability a cost '''
+    def adjust_objective_matrix_availability(self):
         # Add not available slots as cost
         # THIS CODE MUST COME LAST WHEN CALCULATING COST
         if self.USE_FACULTY_AVAILABILITY:
@@ -330,46 +344,51 @@ class match_maker():
     def check_availability(self):
         
         # Faculty
-        requested_off = np.where(self.faculty_availability == 0)
-        not_respected = self.results[requested_off[0],
-                                     :,
-                                     requested_off[1]] == 1
-        problems = np.where(not_respected == True)
-        try:
-            faculty_names = self.faculty_names[requested_off[1][problems[0]]]
-        except:
-            raise ValueError('problems[1] out of bounds')
+        if self.USE_FACULTY_AVAILABILITY:
+            requested_off = np.where(self.faculty_availability == 0)
+            not_respected = self.results[requested_off[0],
+                                         :,
+                                         requested_off[1]] == 1
+            problems = np.where(not_respected == True)
+            try:
+                faculty_names = self.faculty_names[requested_off[1][problems[0]]]
+            except:
+                raise ValueError('problems[1] out of bounds')
+                
+            faculty_names = np.unique(faculty_names)
             
-        faculty_names = np.unique(faculty_names)
-        
-        self.print('')
-        self.print('**************************************')
-        self.print('Faculty schedules not respected')
-        if len(faculty_names) > 0:
-            self.print(faculty_names)
-        else:
-            self.print(' -- None --')
+            self.print('')
+            self.print('**************************************')
+            self.print('Faculty schedules not respected')
+            if len(faculty_names) > 0:
+                self.print(faculty_names)
+            else:
+                self.print(' -- None --')
         
         # Students
-        requested_off = np.where(self.student_availability == 0)
-        not_respected = self.results[requested_off[0],
-                                     requested_off[1],
-                                     :] == 1
-        problems = np.where(not_respected == True)
-        student_names = self.student_names[requested_off[1][problems[0]]]
-        student_names = np.unique(student_names)
-        
-        self.print('Student schedules not respected')
-        if len(student_names) > 0:
-            self.print(student_names)
-        else:
-            self.print(' -- None --')
-        self.print('**************************************')
-        self.print('')
+        if self.USE_STUDENT_AVAILABILITY:
+            requested_off = np.where(self.student_availability == 0)
+            not_respected = self.results[requested_off[0],
+                                         requested_off[1],
+                                         :] == 1
+            problems = np.where(not_respected == True)
+            student_names = self.student_names[requested_off[1][problems[0]]]
+            student_names = np.unique(student_names)
+            
+            self.print('Student schedules not respected')
+            if len(student_names) > 0:
+                self.print(student_names)
+            else:
+                self.print(' -- None --')
+            self.print('**************************************')
+            self.print('')
         
     ''' Check if lunch preferences are respected '''
     
     def check_lunch(self):
+        
+        if not self.USE_WORK_LUNCH:
+            return
         
         lunch_results = self.results[self.LUNCH_PERIOD, :, :]
         work_during_lunch = np.sum(lunch_results, axis=0)
@@ -625,8 +644,8 @@ class match_maker():
     
     def get_pref_col(self, faculty_pref, student_pref):
                 
-        FACULTY_PREF_STEM = 'PreferenceforStudents'
-        STUD_PREF_STEM = 'PreferenceforFaculty'
+        FACULTY_PREF_STEM = 'ChoiceStudent'
+        STUD_PREF_STEM = 'PreferenceforFacultyInterviewer'
 
         faculty_col = self.get_pref_loop(FACULTY_PREF_STEM, faculty_pref)
         student_col = self.get_pref_loop(STUD_PREF_STEM, student_pref)
@@ -635,7 +654,7 @@ class match_maker():
     
     def get_sim_col(self, faculty_pref):
         
-        STEM = 'MostSimilarFaculty'
+        STEM = 'MostSimilarFacultyMember'
         col = self.get_pref_loop(STEM, faculty_pref)
         
         return col
@@ -710,6 +729,7 @@ class match_maker():
                 if col[i] == 0:
                     raise ValueError('Field not found: ' + col_name)
             except:
+                set_trace()
                 raise ValueError('Field not found: ' + col_name)
                     
         return col
@@ -767,6 +787,7 @@ class match_maker():
         # Check that the number of availabilities is expected
         [_, num_available] = np.shape(availability)
         if num_available != num_expected_available:
+            set_trace()
             raise ValueError(
                 'The availability data does not match the preference data')
 
@@ -788,7 +809,6 @@ class match_maker():
         # Load the matrix data
         col = self.get_sim_col(faculty_match_data)
         similarity = np.transpose(faculty_match_data[1:, col.astype(int)])
-        
         num_pref, num_faculty = np.shape(similarity)
         if num_faculty != self.num_faculty:
             raise ValueError('The number of faculty with similarities does not match the total number of faculty')     
@@ -960,9 +980,11 @@ class match_maker():
         faculty_col, student_col = self.get_pref_col(faculty_match_data, stud_match_data)         
         
         if len(faculty_col) == 0:
+            set_trace()
             raise ValueError('Faculty preference data not found')
         if len(student_col) == 0:
-            raise ValueError('Faculty preference data not found')
+            set_trace()
+            raise ValueError('Student preference data not found')
             
         student_pref = np.transpose(stud_match_data[1:, student_col.astype(int)])
         faculty_pref = np.transpose(faculty_match_data[1:, faculty_col.astype(int)])
@@ -1217,11 +1239,10 @@ class match_maker():
     
                         num_slots_unavailable = sum(
                             self.faculty_availability[:, p] == 0)
-    
                         if num_slots_unavailable <= 0.5 * self.NUM_INTERVIEWS:
                             model.Add(self.MIN_INTERVIEWS <= num_interviews_prof)
                         elif num_slots_unavailable != self.NUM_INTERVIEWS:
-                            model.Add(self.MIN_INTERVIEWS - num_slots_unavailable
+                            model.Add(self.MIN_INTERVIEWS - int(num_slots_unavailable)
                                       <= num_interviews_prof)
                         # else:
                         # we don't let them have interviews if they aren't
@@ -1284,8 +1305,8 @@ class match_maker():
                 self.matches_as_text()
     
                 # Write the results to a file
-                self.print_numpy_arrays('results.csv', self.results)
-                np.savetxt(path.join(self.RESULTS_PATH, 'matches.csv'),
+                self.print_numpy_arrays(self.RESULTS_NAME, self.results)
+                np.savetxt(path.join(self.RESULTS_PATH, self.MATCHES_CSV_NAME),
                            self.matches, delimiter=",",
                            fmt='%i')
     
@@ -1326,7 +1347,7 @@ class match_maker():
             self.faculty_schedule.append(temp_list)
             faculty_objective[p] = temp_objective
 
-        self.print_schedules('Faculty', 'faculty_schedules',
+        self.print_schedules('Faculty', self.FACULTY_SCHEDULES_DIR,
                              self.nice_faculty_names, self.faculty_schedule,
                              self.faculty_suggest_matches, faculty_objective)
 
@@ -1350,7 +1371,7 @@ class match_maker():
             self.student_schedule.append(temp_list)
             student_objective[s] = temp_objective
 
-        self.print_schedules('Student', 'student_schedules',
+        self.print_schedules('Student', self.STUDENT_SCHEDULES_DIR,
                              self.nice_student_names, self.student_schedule,
                              self.stud_suggest_matches, student_objective)
 
@@ -1370,7 +1391,7 @@ class match_maker():
             matches_2_print.append(text)
 
         filename = path.join(self.RESULTS_PATH,
-                             'matches.txt')
+                             self.MATCHES_TXT_NAME)
         np.savetxt(filename, matches_2_print,
                    delimiter="", fmt='%15s')
 
@@ -1906,9 +1927,9 @@ class defaults():
         ''' Constants '''
 
         # Text
-        self.PATH = "/media/veracrypt1/Users/Cale/Documents/Calers_Writing/PhD/GEC/scheduling_software/2019_data/processed_for_program"
-        self.STUDENT_PREF = "CWRU_BME_Open_House-Students.csv"
-        self.FACULTY_PREF = "CWRU_BME_Open_House-Faculty.csv"
+        self.PATH = "/media/veracrypt1/Users/Cale/Documents/Calers_Writing/PhD/GEC/scheduling_software/2020_data/processed_for_program"
+        self.STUDENT_PREF = "CWRU_BME_Open_House-Student_Survey.csv"
+        self.FACULTY_PREF = "CWRU_BME_Open_House-Faculty_Survey.csv"
         self.TIMES_NAME = "interview_times.csv"
         self.FACULTY_TRACK_FILE_NAME = 'faculty_tracks.csv'
         self.STUDENT_TRACK_FILE_NAME = 'student_tracks.csv'
@@ -1924,7 +1945,7 @@ class defaults():
         self.USE_INTERVIEW_LIMITS = True
         self.USE_EXTRA_SLOTS = True  # Make reccomendations for matches not made
         self.USE_RANKING = True     # True if use preference order instead of binary
-        self.USE_WORK_LUNCH = True
+        self.USE_WORK_LUNCH = False
         self.USE_RECRUITING = True
         self.USE_STUDENT_AVAILABILITY = True
         self.USE_FACULTY_AVAILABILITY = True
@@ -2280,10 +2301,13 @@ class re_match_maker(match_maker):
     
     def __init__(self, dir_name):        
         self.dir_name = dir_name
-        super(re_match_maker, self).__init__()
+        
+        # Get the default parameters for the matchmaker
+        super(re_match_maker, self).__init__() 
         
         self.STUDENT_REMATCH_NAME = 'student_rematch.csv'
         self.FACULTY_REMATCH_NAME = 'faculty_rematch.csv'
+        self.CHANGE_COST = 2500        # Will be made negative when used
         
         self.check_file_available()
         self.load_parameters()
@@ -2345,7 +2369,8 @@ class re_match_maker(match_maker):
             student_flag = False
         else:
             self.print('Student availability changed for:')
-            self.print(self.student_names[self.student_changed])
+            self.print(np.unique(self.student_names[self.student_changed]))
+            self.print('')
             student_flag = True
         
         self.faculty_changed = np.where(self.faculty_rematch_bool != self.faculty_availability)[1]
@@ -2354,7 +2379,8 @@ class re_match_maker(match_maker):
             faculty_flag = False
         else:
             self.print('Faculty availability changed for:')
-            self.print(self.faculty_names[self.faculty_changed])
+            self.print(np.unique(self.faculty_names[self.faculty_changed]))
+            self.print('')
             faculty_flag = True
         
         if not student_flag and not faculty_flag:
@@ -2364,8 +2390,12 @@ class re_match_maker(match_maker):
         self.should_continue = True
         
         # Load the old matches
-        self.old_matches = self.load_matrix_data(path.join('results', 'matches.csv'))
-        self.old_matches = np.asarray(self.old_matches)
+        self.old_matches = self.load_matrix_data(path.join('results', self.MATCHES_CSV_NAME))
+        self.old_matches = np.asarray(self.old_matches).astype(int)
+        
+        # Change the availability data
+        self.student_availability = self.student_rematch_bool
+        self.faculty_availability = self.faculty_rematch_bool
         
     
     def calc_objective_matrix(self):
@@ -2381,51 +2411,71 @@ class re_match_maker(match_maker):
     def update_objective_matrix(self):
         
         # Determine how good each match was
-        student_pref = self.student_pref.astype(int) * self.old_matches.astype(int)
-        faculty_pref = self.faculty_pref.astype(int) * self.old_matches.astype(int)
+        student_pref = self.student_pref.astype(int) * self.old_matches
+        faculty_pref = self.faculty_pref.astype(int) * self.old_matches
         
         # For each match, determine if better matches can be made
         self.can_update = np.zeros((self.num_students, self.num_faculty))
         self.do_not_update = np.zeros((self.num_students, self.num_faculty))
-        better_for_students = np.zeros((self.num_students, self.num_faculty))
-        better_for_faculty = np.zeros((self.num_students, self.num_faculty))
+        better_matches_for_students = np.zeros((self.num_students, self.num_faculty))
+        same_matches_for_students = np.zeros((self.num_students, self.num_faculty))
+        better_matches_for_facultys = np.zeros((self.num_students, self.num_faculty))
+        same_matches_for_facultys = np.zeros((self.num_students, self.num_faculty))
         
+        # Find matches that would be better for faculty and students
         for s in self.all_students:
             for p in self.all_faculty:
                 
+                # Don't try to change matches that weren't made
+                if self.old_matches[s, p] == 0:
+                    continue
+                
                 # Find faculty that would be better for the student
-                better_faculty_idx = np.where(self.student_pref[s, :] >= self.student_pref[s, p])
+                better_faculty_idx = np.where(self.student_pref[s, :] > self.student_pref[s, p])[0]
+                same_faculty_idx = np.where(self.student_pref[s, :] == self.student_pref[s, p])[0]
+                same_faculty_idx = same_faculty_idx[same_faculty_idx != s]
                 currently_unassigned = np.where(student_pref[s, :] == 0)
                 try:
                     better_for_student = better_faculty_idx[np.where(np.in1d(better_faculty_idx, currently_unassigned))[0]]
-                except:
-                        a = 1
+                    same_for_student = same_faculty_idx[np.where(np.in1d(same_faculty_idx, currently_unassigned))[0]]
+                    better_matches_for_students[s, better_for_student] = 1
+                    same_matches_for_students[s, same_for_student] = 1
+                except Exception as e:
+                    print(e)
+                
+                if len(better_for_student) > 0:
+                    self.can_update[s, p] = 1
                         
                 # Find students that would be better for the faculty
-                better_student_idx = np.where(self.faculty_pref[:, p] >= self.faculty_pref[s, p])
-                currently_unassigned = np.where(student_pref[s, :] == 0)
+                better_student_idx = np.where(self.faculty_pref[:, p] > self.faculty_pref[s, p])[0]
+#                same_student_idx = np.where(self.faculty_pref[:, p] == self.faculty_pref[s, p])[0]
+                currently_unassigned = np.where(faculty_pref[:, p] == 0)
                 try:
-                    better_for_student = better_faculty_idx[np.where(np.in1d(better_faculty_idx, currently_unassigned))[0]]
-                except:
-                        a = 1
-                
-                # Find the faculty who want the student more than the current match
-                try:
-                    faculty_rankings = np.in1d(np.where(self.faculty_pref[s, better_for_student] >= self.faculty_pref[s, p]),
-                                               np.where(faculty_pref[:,s] == 0))
-                except:
-                    a = 1
-                    
-                if len(faculty_rankings) > 0:
-                    self.can_update[s, faculty_rankings] = 1
+                    better_for_faculty = better_student_idx[np.where(np.in1d(better_student_idx, currently_unassigned))[0]]
+#                    same_for_faculty = same_student_idx[np.where(np.in1d(same_student_idx, currently_unassigned))[0]]
+                    better_matches_for_facultys[better_for_faculty, p] = 1
+#                    same_matches_for_facultys[same_for_faculty, p] = 1
+                except Exception as e:
+                    print(e)
+                        
+                if len(better_for_faculty) > 0:
                     self.can_update[s, p] = 1
-                else:
-                    self.do_not_update[s, p] = 1
+        
+        # If something has an equal cost - avoid changing
+        same_objective = same_matches_for_students
+        same_objective[self.old_matches == 1] = 0
+        self.objective_matrix[:, same_objective.astype(bool)] -= self.CHANGE_COST
+#        self.objective_matrix[:, same_matches_for_facultys.astype(bool)] -= self.CHANGE_COST
                     
+        # When a better match can be made, allow it to change
+        better_for_both = np.logical_and(better_matches_for_facultys, better_matches_for_facultys)
+        self.do_not_update[better_for_both == 0] = 1
+        self.do_not_update[self.can_update == 1] = 0
+        
         # Ensure that slots that were previously unavailable get assigned to a new person
         self.do_not_update[self.student_changed, :] = 0
         self.do_not_update[:, self.faculty_changed] = 0
-    
+ 
     
     def main(self):
         
@@ -2443,6 +2493,7 @@ class re_match_maker(match_maker):
             # Get objective matrix
             self.load_data()
             self.load_re_match_data()
+            self.adjust_objective_matrix_availability()
             
             if self.should_continue == False:
                 print('Exiting')
@@ -2456,6 +2507,15 @@ class re_match_maker(match_maker):
                 print('No changes in availability.  Exiting...')
                 return
             
+            # Redefine output filenames now that we have input all the data
+            # from the old files
+            self.RESULTS_NAME = 'results_rematch.csv'
+            self.MATCHES_CSV_NAME = 'matches_rematch.csv'
+            self.MATCHES_TXT_NAME = 'matches_rematch.txt'
+            self.STUDENT_SCHEDULES_DIR = 'student_schedules_rematch'
+            self.FACULTY_SCHEDULES_DIR = 'faculty_schedules_rematch'
+            
+            self.objective_matrix[self.objective_matrix == 0] = 1
             objective_matrix = self.objective_matrix
     
             # Creates interview variables.
@@ -2486,10 +2546,10 @@ class re_match_maker(match_maker):
                     model.Add(sum(self.interview[(p, s, i)]
                                   for i in self.all_interviews) <= 1)
                     
-            # Constrain matches that must be made
+            # Constrain matches that must be made (because they were previously made)
             for s in self.all_students:
                 for p in self.all_faculty:
-                    if self.do_not_update[s, p] == 1:
+                    if self.do_not_update[s, p] == 1:                        
                         model.Add(sum(self.interview[(p, s, i)]
                                       for i in self.all_interviews) == self.old_matches[s, p])
     
@@ -2508,7 +2568,7 @@ class re_match_maker(match_maker):
                         num_slots_unavailable = sum(
                             self.student_availability[:, s] == 0)
     
-                        # If the person is available for more than half the interview
+                        # If the person is available for more than half the interviews
                         # try not to penalize them for being unavailable.  Otherwise,
                         # let them be penalized
                         if num_slots_unavailable <= 0.5 * self.NUM_INTERVIEWS:
@@ -2528,7 +2588,7 @@ class re_match_maker(match_maker):
                     num_interviews_prof = sum(self.interview[(
                         p, s, i)] for s in self.all_students for i in self.all_interviews)
     
-                    # If the person is available for more than half the interview
+                    # If the person is available for more than half the interviews
                     # try not to penalize them for being unavailable.  Otherwise,
                     # let them be penalized
                     if not self.USE_FACULTY_AVAILABILITY:
@@ -2604,8 +2664,8 @@ class re_match_maker(match_maker):
                 self.matches_as_text()
     
                 # Write the results to a file
-                self.print_numpy_arrays('results.csv', self.results)
-                np.savetxt(path.join(self.RESULTS_PATH, 'matches.csv'),
+                self.print_numpy_arrays(self.RESULTS_NAME, self.results)
+                np.savetxt(path.join(self.RESULTS_PATH, self.MATCHES_CSV_NAME),
                            self.matches, delimiter=",",
                            fmt='%i')
     
@@ -2616,15 +2676,40 @@ class re_match_maker(match_maker):
     
             else:
                 self.print('-------- Solver failed! --------')
-
-
+            
+            self.find_differences()
+            
+    def find_differences(self):
+        
+        # Student differences
+        self.print('Student matches changed:')
+        for s in self.all_students:
+            for p in self.all_faculty:
+                if self.matches[s, p] == 1 and self.old_matches[s, p] == 0:
+                    self.print(self.student_names[s] + ": +" + self.faculty_names[p])
+                elif self.matches[s, p] == 0 and self.old_matches[s, p] == 1:
+                    self.print(self.student_names[s] + ": -" + self.faculty_names[p])
+        self.print('')
+        
+        # Faculty differences
+        self.print('Faculty matches changed:')
+        for p in self.all_faculty:
+            for s in self.all_students:
+            
+                if self.matches[s, p] == 1 and self.old_matches[s, p] == 0:
+                    self.print(self.faculty_names[p] + ": +" + self.student_names[s])
+                elif self.matches[s, p] == 0 and self.old_matches[s, p] == 1:
+                    self.print(self.faculty_names[p] + ": -" + self.student_names[s])
+        self.print('')
+        
+        
 if __name__ == '__main__':
     
-    rm = re_match_maker("/media/veracrypt1/Users/Cale/Documents/Calers_Writing/PhD/GEC/scheduling_software/2019_data/processed_for_program")
-    rm.main()
+    #rm = re_match_maker("/media/veracrypt1/Users/Cale/Documents/Calers_Writing/PhD/GEC/scheduling_software/2019_data/processed_for_program")
+    #rm.main()
     
 #    mm = match_maker()
 #    mm.main()
-    
-#    mm = match_maker()
-#    g = gui(mm)
+     mm = match_maker()
+     mm.main()
+      # g = gui(mm)
