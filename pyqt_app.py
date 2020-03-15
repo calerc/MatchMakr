@@ -42,8 +42,18 @@ class SettingsFrame(QFrame):
     
     def __init__(self, q_main_window):
         super(SettingsFrame, self).__init__()
+        # self.settings_frame = QFrame()
+        # self.button_frame = QFrame()
+        # self.addWidget(self.settings_frame)
+        # self.addWidget(self.button_frame)
         # self.setLayout(QGridLayout())
-        self.settings_grid = QGridLayout(self)
+        self.split_frame = QVBoxLayout(self)
+        self.settings_frame = QFrame()
+        self.button_frame = QFrame()
+        self.split_frame.addWidget(self.settings_frame)
+        self.split_frame.addWidget(self.button_frame)
+        self.settings_grid = QGridLayout(self.settings_frame)
+        
         self.q_main_window = q_main_window
         self.define_labels()
         self.define_text_boxes()
