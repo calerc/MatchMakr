@@ -1591,6 +1591,21 @@ class match_maker():
                 raise ValueError('Response unknown')
 
         return out_array
+    
+    def set_printer(self, function_handle):
+        sys.stdout.write = function_handle
+    
+    def validate(self):
+        
+        # Check parameter validity
+        input_checker(self)        
+        
+        with open(path.join(self.RESULTS_PATH, self.LOG_FILE_NAME), 'w') as self.log_file:
+
+            # Log the attributes used to make the matches
+            self.print_atributes()
+            self.load_data()
+    
 
 
 '''
