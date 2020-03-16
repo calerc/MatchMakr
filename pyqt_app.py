@@ -16,7 +16,7 @@ import time
 import threading
 
 class Communicate(QObject):
-    detect_change = pyqtSignal(str)
+    detect_change = pyqtSignal(str, str)
 
 def detect_change(callback_function, string_io, frame):
     signal_src = Communicate()
@@ -27,15 +27,18 @@ def detect_change(callback_function, string_io, frame):
     while frame:
         string_io.flush()
         new_value = string_io.getvalue()
+        # is_same = new_value
         if new_value == old_value:
             is_same = str(1)
+            text = ''
         else:
             is_same = str(0)
+            text = new_value
             old_value = new_value
             
-        time.sleep(0.0001)
+        time.sleep(0.1)
         
-        signal_src.detect_change.emit(is_same)
+        signal_src.detect_change.emit(is_same, text)
 
 class Dock(QListWidget):
     
@@ -313,6 +316,9 @@ class RunFrame(QFrame):
         self.define_settings()
         self.define_text_output()
         
+        # Running
+        self.stop_running = False
+        
         # Logging
         self.f = f
         self.start_detect_change()
@@ -321,9 +327,14 @@ class RunFrame(QFrame):
         # self.updater = threading.Thread(target = self.update_output, args=(1,))
         # self.updater.start()
     
-    def update_text_listener(self, is_same):
+    def update_text_listener(self, is_same, new_string):        
         if is_same == '0':
-            self.update_text()
+            self.new_text(new_string)
+            # self.append_text(is_same)
+            # self.update_text()
+    
+    def new_text(self, text):
+        self.output.setText(text)
     
     def start_detect_change(self):
         self.thread = threading.Thread(target=detect_change, args=(self.update_text_listener, self.f, self))
@@ -343,8 +354,16 @@ class RunFrame(QFrame):
         
         self.bt_validate = add_button(self, 'Validate', self.validate)
         self.bt_run = add_button(self, 'Run', self.run)
+        self.bt_interrupt = add_button(self, 'Interrupt', self.interrupt)
         self.bt_clear = add_button(self, 'Clear Output', self.clear_output)
         self.bt_remove_results = add_button(self, 'Remove Results', self.remove_results)
+    
+    
+    '''
+        IMPLEMENT
+    '''
+    def interrupt(self):
+        self.stop_running = True
     
     def update_text(self):
         self.f.flush()
@@ -398,8 +417,9 @@ class RunFrame(QFrame):
         frame_width = self.output_frame.width()
         frame_height = self.output_frame.height()
         self.output.resize(frame_width, frame_height)
-
-
+        
+    def append_text(self, string):
+        self.output.insertPlainText(string)
 
 class IOChecker(QTextEdit):
     has_changed= pyqtSignal('QString')
@@ -544,6 +564,11 @@ class MatchMakr(QMainWindow):
 if __name__ == '__main__':
     app = QApplication(sys.argv)
     m_m = match_maker()
+    f = io.StringIO() 
+    # mm = MatchMakr(m_m, f)
+    # m_m.set_printer(mm.run_frame.append_text)
+    # mm.show()
+    # sys.exit(app.exec_())
     
     f = io.StringIO()    
     with redirect_stdout(f):
