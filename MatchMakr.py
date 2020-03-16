@@ -51,6 +51,7 @@ class Dock(QListWidget):
                          'Run'       : self.q_main_window.run_callback}
     
         return callback_dict[text]
+    
 class LineBox(QLineEdit):
     
     def __init__(self, parent):
