@@ -16,32 +16,14 @@ import time
 import threading
 from queue import Queue
 
-# class Communicate(QObject):
-#     detect_change = pyqtSignal(str, str)
-
-# def detect_change(callback_function, string_io, frame):
-#     signal_src = Communicate()
-#     signal_src.detect_change.connect(callback_function)
-    
-#     old_value = string_io.getvalue()
-    
-#     while frame:
-#         string_io.flush()
-#         new_value = string_io.getvalue()
-#         # is_same = new_value
-#         if new_value == old_value:
-#             is_same = str(1)
-#             text = ''
-#         else:
-#             is_same = str(0)
-#             text = new_value
-#             old_value = new_value
-            
-#         time.sleep(1)
+'''
+    TODO:
+        Apply settings
+            Send to matchmaker
+        Implement interrupt
+        Create icon
+'''
         
-#         signal_src.detect_change.emit(is_same, text)
-        
-
 
 class Dock(QListWidget):
     
@@ -69,7 +51,6 @@ class Dock(QListWidget):
                          'Run'       : self.q_main_window.run_callback}
     
         return callback_dict[text]
-    
 class LineBox(QLineEdit):
     
     def __init__(self, parent):
@@ -78,13 +59,11 @@ class LineBox(QLineEdit):
         self.get_file = False
     
     def mouseDoubleClickEvent(self, event):
-        
-        print('Double Clicked:' + self.text())
-        
+                
         if self.get_file:
-            self.setText('Double Clicked')
+            dir_name = QFileDialog.getExistingDirectory(self, 'Select Directory', self.text())
+            self.setText(dir_name)
       
-
 class SettingsFrame(QFrame):
     
     def __init__(self, q_main_window):
@@ -321,9 +300,6 @@ class RunFrame(QFrame):
         
         # Running
         self.stop_running = False
-        
-        # Logging
-        # self.start_detect_change()
     
     def update_text_listener(self, is_same, new_string):        
         if is_same == '0':
@@ -332,10 +308,6 @@ class RunFrame(QFrame):
     def new_text(self, text):
         self.output.setText(text)
         QApplication.processEvents()
-    
-    # def start_detect_change(self):
-    #     self.thread = threading.Thread(target=detect_change, args=(self.update_text_listener, self.f, self))
-    #     self.thread.start()
         
     def define_settings(self):
         self.define_controls()
@@ -353,36 +325,20 @@ class RunFrame(QFrame):
         self.bt_run = add_button(self, 'Run', self.run)
         self.bt_interrupt = add_button(self, 'Interrupt', self.q_main_window.start_thread)
         self.bt_clear = add_button(self, 'Clear Output', self.clear_output)
-        self.bt_remove_results = add_button(self, 'Remove Results', self.remove_results)
+        self.bt_remove_results = add_button(self, 'Remove Results', self.remove_results)    
     
-    
-    '''
-        IMPLEMENT
-    '''
     def interrupt(self):
         self.stop_running = True
-    
-    # def update_text(self):
-    #     self.f.flush()
-    #     text = self.f.getvalue()
-    #     self.output.setText(text)
-    #     time.sleep(1)
         
     def validate(self):
         t = threading.Thread(target=self.q_main_window.match_maker.validate)
-        t.start()
-        # self.q_main_window.match_maker.validate()
-        # self.update_text()
-        
+        t.start()        
     
     def run(self):
         t = threading.Thread(target=self.q_main_window.match_maker.main)
         t.start()
-        # self.q_main_window.match_maker.main()
     
     def clear_output(self):
-        # self.q_main_window.f.truncate(0)
-        # self.q_main_window.f.seek(0)
         self.output.setText('')
     
     def remove_results(self):
@@ -392,9 +348,14 @@ class RunFrame(QFrame):
         self.dir_to_remove = join(working_dir, results_dir)
         
         def callback(button_pressed):
-            if button_pressed.text() == 'Ok':
-                shutil.rmtree(self.dir_to_remove)
-                print('Results Removed')
+            text = button_pressed.text()
+            print(text)
+            if button_pressed.text() == '&OK':
+                try:
+                    shutil.rmtree(self.dir_to_remove)
+                    print('Directory Removed: ' + self.dir_to_remove)
+                except:
+                    print('Directory not found: ' + self.dir_to_remove)
             else:
                 return
         
@@ -409,8 +370,6 @@ class RunFrame(QFrame):
         
         
     def define_text_output(self):
-        # text = "Her extensive perceived may any sincerity extremity. Indeed add rather may pretty see. Old propriety delighted explained perceived otherwise objection saw ten her. Doubt merit sir the right these alone keeps. By sometimes intention smallness he northward. Consisted we otherwise arranging commanded discovery it explained. Does cold even song like two yet been. Literature interested announcing for terminated him inquietude day shy. Himself he fertile chicken perhaps waiting if highest no it. Continued promotion has consulted fat improving not way.  Folly was these three and songs arose whose. Of in vicinity contempt together in possible branched. Assured company hastily looking garrets in oh. Most have love my gone to this so. Discovered interested prosperous the our affronting insipidity day. Missed lovers way one vanity wishes nay but. Use shy seemed within twenty wished old few regret passed. Absolute one hastened mrs any sensible.   Or kind rest bred with am shed then. In raptures building an bringing be. Elderly is detract tedious assured private so to visited. Do travelling companions contrasted it. Mistress strongly remember up to. Ham him compass you proceed calling detract. Better of always missed we person mr. September smallness northward situation few her certainty something.   Sportsman delighted improving dashwoods gay instantly happiness six. Ham now amounted absolute not mistaken way pleasant whatever. At an these still no dried folly stood thing. Rapid it on hours hills it seven years. If polite he active county in spirit an. Mrs ham intention promotion engrossed assurance defective. Confined so graceful building opinions whatever trifling in. Insisted out differed ham man endeavor expenses. At on he total their he songs. Related compact effects is on settled do.   Do am he horrible distance marriage so although. Afraid assure square so happen mr an before. His many same been well can high that. Forfeited did law eagerness allowance improving assurance bed. Had saw put seven joy short first. Pronounce so enjoyment my resembled in forfeited sportsman. Which vexed did began son abode short may. Interested astonished he at cultivated or me. Nor brought one invited she produce her.   Barton did feebly change man she afford square add. Want eyes by neat so just must. Past draw tall up face show rent oh mr. Required is debating extended wondered as do. New get described applauded incommode shameless out extremity but. Resembled at perpetual no believing is otherwise sportsman. Is do he dispatched cultivated travelling astonished. Melancholy am considered possession on collecting everything.   May indulgence difficulty ham can put especially. Bringing remember for supplied her why was confined. Middleton principle did she procuring extensive believing add. Weather adapted prepare oh is calling. These wrong of he which there smile to my front. He fruit oh enjoy it of whose table. Cultivated occasional old her unpleasing unpleasant. At as do be against pasture covered viewing started. Enjoyed me settled mr respect no spirits civilly.   Dashwood contempt on mr unlocked resolved provided of of. Stanhill wondered it it welcomed oh. Hundred no prudent he however smiling at an offence. If earnestly extremity he he propriety something admitting convinced ye. Pleasant in to although as if differed horrible. Mirth his quick its set front enjoy hoped had there. Who connection imprudence middletons too but increasing celebrated principles joy. Herself too improve gay winding ask expense are compact. New all paid few hard pure she.   That know ask case sex ham dear her spot. Weddings followed the all marianne nor whatever settling. Perhaps six prudent several her had offence. Did had way law dinner square tastes. Recommend concealed yet her procuring see consulted depending. Adieus hunted end plenty are his she afraid. Resources agreement contained propriety applauded neglected use yet.  Up unpacked friendly ecstatic so possible humoured do. Ample end might folly quiet one set spoke her. We no am former valley assure. Four need spot ye said we find mile. Are commanded him convinced dashwoods did estimable forfeited. Shy celebrated met sentiments she reasonably but. Proposal its disposed eat advanced marriage sociable. Drawings led greatest add subjects endeavor gay remember. Principles one yet assistance you met impossible."
-        # self.output.setText(text)
         self.output.setReadOnly(True)
         self.resize_text_output()
         
@@ -486,16 +445,13 @@ class MatchMakr(QMainWindow):
     
     def settings_callback(self):
         self.stacked_widget.setCurrentWidget(self.settings_frame)
-        # print("Settings")
     
     def advanced_settings_callback(self):
         self.stacked_widget.setCurrentWidget(self.advanced_settings_frame)
-        # print("Advanced Settings")
         
     def run_callback(self):
         self.stacked_widget.setCurrentWidget(self.run_frame)
         self.run_frame.resize_text_output()
-        # print('Run')
         
     def load_settings(self):
         settings = [self.settings_frame, self.advanced_settings_frame]
@@ -504,7 +460,6 @@ class MatchMakr(QMainWindow):
         filename = filename[0]
         if filename == '':
             return
-        # filename = join(getcwd(), 'settings.yaml')
         print('Saving to file: ' + filename)
         
         with open(filename, 'r') as f:
@@ -514,7 +469,6 @@ class MatchMakr(QMainWindow):
             
         for s in settings:
             s_keys = s.__dict__.keys()
-            # s_values = s.__dict__.values()
             for key, value in zip(yaml_keys, yaml_values):
                 if key in s_keys:
                     prefix = key[0:3]
@@ -557,8 +511,6 @@ class MatchMakr(QMainWindow):
         self.run_frame.output.insertPlainText(text)
         bottom = self.run_frame.output.verticalScrollBar().maximum()
         self.run_frame.output.verticalScrollBar().setValue(bottom)
-        # self.run_frame.output.show()
-        # self.app.processEvents()
         
     @pyqtSlot()
     def start_thread(self):
@@ -637,17 +589,11 @@ if __name__ == '__main__':
     app = QApplication(sys.argv)
     m_m = match_maker()
     mm = MatchMakr(m_m)
-    mm.show()
-    
+    mm.show()    
     
     # Create Queue and redirect sys.stdout to this queue
     queue = Queue()
     sys.stdout = WriteStream(queue)
-    
-    # Create QApplication and QWidget
-    # qapp = QApplication(sys.argv)  
-    # app = MyApp()
-    # app.show()    
     
     # Create thread that will listen on the other end of the queue, and send the text to the textedit in our application
     thread = QThread()
@@ -656,19 +602,5 @@ if __name__ == '__main__':
     my_receiver.moveToThread(thread)
     thread.started.connect(my_receiver.run)
     thread.start()
-    
-    # app.exec_()
+
     sys.exit(app.exec_())
-    # f = DataStream(sys.stdout)
-    
-    # f = io.StringIO() 
-    # # mm = MatchMakr(m_m, f)
-    # # m_m.set_printer(mm.run_frame.append_text)
-    # # mm.show()
-    # # sys.exit(app.exec_())
-    
-    # with redirect_stdout(f):
-    #     f2 = DataStream(f)
-    #     mm = MatchMakr(m_m, f2)
-    #     mm.show()
-    #     sys.exit(app.exec_())
