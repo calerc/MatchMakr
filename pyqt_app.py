@@ -15,27 +15,27 @@ import io
 import time
 import threading
 
-class Communicate(QObject):
-    detect_change = pyqtSignal(str)
+# class Communicate(QObject):
+#     detect_change = pyqtSignal(str)
 
-def detect_change(callback_function, string_io, frame):
-    signal_src = Communicate()
-    signal_src.detect_change.connect(callback_function)
+# def detect_change(callback_function, string_io, frame):
+#     signal_src = Communicate()
+#     signal_src.detect_change.connect(callback_function)
     
-    old_value = string_io.getvalue()
+#     old_value = string_io.getvalue()
     
-    while frame:
-        string_io.flush()
-        new_value = string_io.getvalue()
-        if new_value == old_value:
-            is_same = str(1)
-        else:
-            is_same = str(0)
-            old_value = new_value
+#     while frame:
+#         string_io.flush()
+#         new_value = string_io.getvalue()
+#         if new_value == old_value:
+#             is_same = str(1)
+#         else:
+#             is_same = str(0)
+#             old_value = new_value
             
-        time.sleep(0.0001)
+#         # time.sleep(0.0001)
         
-        signal_src.detect_change.emit(is_same)
+#         signal_src.detect_change.emit(is_same)
 
 class Dock(QListWidget):
     
@@ -314,20 +314,18 @@ class RunFrame(QFrame):
         self.define_text_output()
         
         # Logging
-        self.f = f
-        self.start_detect_change()
+        # sys.stdout.write = self.output.insertPlainText
+        # print('testing')
         # self.f = f
-        # self.done = False
-        # self.updater = threading.Thread(target = self.update_output, args=(1,))
-        # self.updater.start()
+        # self.start_detect_change()
     
     def update_text_listener(self, is_same):
         if is_same == '0':
             self.update_text()
     
-    def start_detect_change(self):
-        self.thread = threading.Thread(target=detect_change, args=(self.update_text_listener, self.f, self))
-        self.thread.start()
+    # def start_detect_change(self):
+    #     self.thread = threading.Thread(target=detect_change, args=(self.update_text_listener, self.f, self))
+    #     self.thread.start()
         
     def define_settings(self):
         self.define_controls()
@@ -347,10 +345,11 @@ class RunFrame(QFrame):
         self.bt_remove_results = add_button(self, 'Remove Results', self.remove_results)
     
     def update_text(self):
-        self.f.flush()
-        text = self.f.getvalue()
-        self.output.setText(text)
-        time.sleep(1)
+        pass
+        # self.f.flush()
+        # text = self.f.getvalue()
+        # self.output.setText(text)
+        # time.sleep(1)
         
     def validate(self):
         self.q_main_window.match_maker.validate()
@@ -541,12 +540,43 @@ class MatchMakr(QMainWindow):
         self.run_frame.resize_text_output()
         
 
+class TextRedirector(object):
+    def __init__(self, widget, tag="stdout"):
+        self.widget = widget
+        self.tag = tag
+
+    def write(self, str):
+        # self.widget.configure(state="normal")
+        self.widget.append(str)
+        # self.widget.configure(state="disabled")
+
+
 if __name__ == '__main__':
+    
     app = QApplication(sys.argv)
     m_m = match_maker()
-    
+   
     f = io.StringIO()    
-    with redirect_stdout(f):
-        mm = MatchMakr(m_m, f)
-        mm.show()
-        sys.exit(app.exec_())
+    # with redirect_stdout(f):
+    mm = MatchMakr(m_m, f)
+    m_m.printer = mm.run_frame.output.insertPlainText
+    
+    # sys.stdout.write = mm.run_frame.output.insertPlainText
+    # sys.stderr.write = mm.run_frame.output.insertPlainText
+    # sys.stdout = TextRedirector(mm.run_frame.output, "stdout")
+    # def redirect(func):
+    #     def inner(s):
+    #         try:
+    #             mm.run_frame.output.setText(s)
+    #             return func
+    #         except:
+    #             return inner
+    # sys.stdout.write=redirect(sys.stdout.write)
+            
+    # def redirect(s):
+    #     mm.run_frame.output.setText(s)
+    # sys.stdout.write = redirect
+    print('test')
+    
+    mm.show()
+    sys.exit(app.exec_())

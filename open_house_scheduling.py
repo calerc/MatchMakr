@@ -214,6 +214,9 @@ class match_maker():
         # Check parameter validity
         input_checker(self)
         
+        # Printer
+        self.printer = None
+        
         
 
     '''
@@ -1095,7 +1098,9 @@ class match_maker():
             
             try:
                 self.log_file.writelines(message + '\n')
+                if self.printer: self.printer(message)
             except:
+                if self.printer: self.printer('?????? List Message could not be printed ??????\n')
                 self.log_file.writelines('?????? List Message could not be printed ??????\n')
                 
         elif type(message) == list and type(message[0]) == str:
@@ -1105,8 +1110,10 @@ class match_maker():
             try:
                 for line in message:
                     self.log_file.writelines(line + '\n')
+                    if self.printer: self.printer(message)
             except:
                 self.log_file.writelines('?????? List Message could not be printed ??????\n')
+                if self.printer: self.printer('?????? List Message could not be printed ??????\n')
         else:
             
             print(message, sep=sep_char, flush=True)
@@ -1115,7 +1122,9 @@ class match_maker():
                     for cell in line:
                         self.log_file.writelines(cell.astype(str))
                         self.log_file.writelines(', ')
+                        if self.printer: self.printer(cell.astype(str))
                     self.log_file.writelines('\n')
+                    if self.printer: self.printer('\n')
             except:
                 try:
                     message = np.reshape(message, (-1, 1))
@@ -1123,7 +1132,9 @@ class match_maker():
                         for cell in line:
                             self.log_file.writelines(cell.astype(str))
                             self.log_file.writelines(', ')
+                            if self.printer: self.printer(cell.astype(str))
                         self.log_file.writelines('\n')
+                        if self.printer: self.printer('\n')
                 except:
                     self.log_file.writelines('?????? Array Message could not be printed ??????\n')
 
@@ -1591,6 +1602,17 @@ class match_maker():
                 raise ValueError('Response unknown')
 
         return out_array
+    
+    def validate(self):
+        
+        # Check parameter validity
+        input_checker(self)        
+        
+        with open(path.join(self.RESULTS_PATH, self.LOG_FILE_NAME), 'w') as self.log_file:
+
+            # Log the attributes used to make the matches
+            self.print_atributes()
+            self.load_data()
 
 
 '''
@@ -2701,6 +2723,7 @@ class re_match_maker(match_maker):
                 elif self.matches[s, p] == 0 and self.old_matches[s, p] == 1:
                     self.print(self.faculty_names[p] + ": -" + self.student_names[s])
         self.print('')
+        
         
         
 if __name__ == '__main__':
