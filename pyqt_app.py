@@ -1,8 +1,8 @@
 import sys
-from PyQt5.QtCore import Qt, pyqtSlot, QObject, pyqtSignal
+from PyQt5.QtCore import Qt, pyqtSlot, QObject, pyqtSignal, QTextStream, QThread
 from PyQt5.QtWidgets import QMainWindow, QDockWidget, QListWidget, QHBoxLayout, QVBoxLayout, QSpacerItem, QListWidgetItem
 from PyQt5.QtWidgets import QApplication, QTextEdit, QAction, QPushButton, QFrame, QGridLayout, QSizePolicy, QLabel
-from PyQt5.QtWidgets import QStackedWidget, QFileDialog, QSpinBox, QCheckBox, QLineEdit, QMessageBox
+from PyQt5.QtWidgets import QStackedWidget, QFileDialog, QSpinBox, QCheckBox, QLineEdit, QMessageBox, QWidget
 from itertools import product
 from ipdb import set_trace
 from os import getcwd
@@ -14,31 +14,34 @@ from contextlib import redirect_stdout
 import io
 import time
 import threading
+from queue import Queue
 
-class Communicate(QObject):
-    detect_change = pyqtSignal(str, str)
+# class Communicate(QObject):
+#     detect_change = pyqtSignal(str, str)
 
-def detect_change(callback_function, string_io, frame):
-    signal_src = Communicate()
-    signal_src.detect_change.connect(callback_function)
+# def detect_change(callback_function, string_io, frame):
+#     signal_src = Communicate()
+#     signal_src.detect_change.connect(callback_function)
     
-    old_value = string_io.getvalue()
+#     old_value = string_io.getvalue()
     
-    while frame:
-        string_io.flush()
-        new_value = string_io.getvalue()
-        # is_same = new_value
-        if new_value == old_value:
-            is_same = str(1)
-            text = ''
-        else:
-            is_same = str(0)
-            text = new_value
-            old_value = new_value
+#     while frame:
+#         string_io.flush()
+#         new_value = string_io.getvalue()
+#         # is_same = new_value
+#         if new_value == old_value:
+#             is_same = str(1)
+#             text = ''
+#         else:
+#             is_same = str(0)
+#             text = new_value
+#             old_value = new_value
             
-        time.sleep(0.1)
+#         time.sleep(1)
         
-        signal_src.detect_change.emit(is_same, text)
+#         signal_src.detect_change.emit(is_same, text)
+        
+
 
 class Dock(QListWidget):
     
@@ -297,7 +300,7 @@ class AdvancedSettingsFrame(SettingsFrame):
        
 class RunFrame(QFrame):
     
-    def __init__(self, q_main_window, f):
+    def __init__(self, q_main_window):
         super(RunFrame, self).__init__()
         
         # Split the frame
@@ -320,25 +323,19 @@ class RunFrame(QFrame):
         self.stop_running = False
         
         # Logging
-        self.f = f
-        self.start_detect_change()
-        # self.f = f
-        # self.done = False
-        # self.updater = threading.Thread(target = self.update_output, args=(1,))
-        # self.updater.start()
+        # self.start_detect_change()
     
     def update_text_listener(self, is_same, new_string):        
         if is_same == '0':
             self.new_text(new_string)
-            # self.append_text(is_same)
-            # self.update_text()
     
     def new_text(self, text):
         self.output.setText(text)
+        QApplication.processEvents()
     
-    def start_detect_change(self):
-        self.thread = threading.Thread(target=detect_change, args=(self.update_text_listener, self.f, self))
-        self.thread.start()
+    # def start_detect_change(self):
+    #     self.thread = threading.Thread(target=detect_change, args=(self.update_text_listener, self.f, self))
+    #     self.thread.start()
         
     def define_settings(self):
         self.define_controls()
@@ -354,7 +351,7 @@ class RunFrame(QFrame):
         
         self.bt_validate = add_button(self, 'Validate', self.validate)
         self.bt_run = add_button(self, 'Run', self.run)
-        self.bt_interrupt = add_button(self, 'Interrupt', self.interrupt)
+        self.bt_interrupt = add_button(self, 'Interrupt', self.q_main_window.start_thread)
         self.bt_clear = add_button(self, 'Clear Output', self.clear_output)
         self.bt_remove_results = add_button(self, 'Remove Results', self.remove_results)
     
@@ -365,23 +362,27 @@ class RunFrame(QFrame):
     def interrupt(self):
         self.stop_running = True
     
-    def update_text(self):
-        self.f.flush()
-        text = self.f.getvalue()
-        self.output.setText(text)
-        time.sleep(1)
+    # def update_text(self):
+    #     self.f.flush()
+    #     text = self.f.getvalue()
+    #     self.output.setText(text)
+    #     time.sleep(1)
         
     def validate(self):
-        self.q_main_window.match_maker.validate()
-        self.update_text()
+        t = threading.Thread(target=self.q_main_window.match_maker.validate)
+        t.start()
+        # self.q_main_window.match_maker.validate()
+        # self.update_text()
         
     
     def run(self):
-        self.q_main_window.match_maker.main()
+        t = threading.Thread(target=self.q_main_window.match_maker.main)
+        t.start()
+        # self.q_main_window.match_maker.main()
     
     def clear_output(self):
-        self.q_main_window.f.truncate(0)
-        self.q_main_window.f.seek(0)
+        # self.q_main_window.f.truncate(0)
+        # self.q_main_window.f.seek(0)
         self.output.setText('')
     
     def remove_results(self):
@@ -440,7 +441,7 @@ class IOChecker(QTextEdit):
 
 class MatchMakr(QMainWindow):
     
-    def __init__(self, match_maker, f, parent=None):
+    def __init__(self, match_maker, parent=None):
         
         super(MatchMakr, self).__init__(parent)
 		
@@ -457,14 +458,11 @@ class MatchMakr(QMainWindow):
         self.items.setFloating(False)
         self.addDockWidget(Qt.LeftDockWidgetArea, self.items)
         
-        # Standard Output Redirect
-        self.f = f
-        
         # Widget Stack
         self.stacked_widget = QStackedWidget(self) 
         
         # Output
-        self.run_frame = RunFrame(self, self.f)
+        self.run_frame = RunFrame(self)
         # self.output = QTextEdit(self.stacked_widget)
         
         # Settings Frame               
@@ -481,6 +479,8 @@ class MatchMakr(QMainWindow):
         
         # Match_maker
         self.match_maker = match_maker
+        
+        # self.app = app
         
         
     
@@ -551,6 +551,22 @@ class MatchMakr(QMainWindow):
         
         with open(filename, 'w') as f:
             yaml.safe_dump(settings_dictionary, f)
+            
+    @pyqtSlot(str)        
+    def append_text(self, text):
+        self.run_frame.output.insertPlainText(text)
+        bottom = self.run_frame.output.verticalScrollBar().maximum()
+        self.run_frame.output.verticalScrollBar().setValue(bottom)
+        # self.run_frame.output.show()
+        # self.app.processEvents()
+        
+    @pyqtSlot()
+    def start_thread(self):
+        self.thread = QThread()
+        self.long_running_thing = LongRunningThing()
+        self.long_running_thing.moveToThread(self.thread)
+        self.thread.started.connect(self.long_running_thing.run)
+        self.thread.start()
                         
                 
         
@@ -559,19 +575,100 @@ class MatchMakr(QMainWindow):
     
     def resizeEvent(self, event):
         self.run_frame.resize_text_output()
+ 
+class DataStream(QTextStream):
+
+    def __init__(self, device):
+        super(DataStream, self).__init__(device)
+    
+    def getvalue(self):
+        return self.readAll()
+    
+    def write(self, string):
+        self.writeQString(string)
+'''
+    ----------------------------------------------------------------------------
+'''
+
+# The new Stream Object which replaces the default stream associated with sys.stdout
+# This object just puts data in a queue!
+class WriteStream(object):
+    def __init__(self,queue):
+        self.queue = queue
+
+    def write(self, text):
+        self.queue.put(text)
         
+    def flush(self):
+        pass
+
+# A QObject (to be run in a QThread) which sits waiting for data to come through a Queue.Queue().
+# It blocks until data is available, and one it has got something from the queue, it sends
+# it to the "MainThread" by emitting a Qt Signal 
+class MyReceiver(QObject):
+    mysignal = pyqtSignal(str)
+
+    def __init__(self,queue,*args,**kwargs):
+        QObject.__init__(self,*args,**kwargs)
+        self.queue = queue
+
+    @pyqtSlot()
+    def run(self):
+        while True:
+            text = self.queue.get()
+            self.mysignal.emit(text)
+
+# An example QObject (to be run in a QThread) which outputs information with print
+class LongRunningThing(QObject):
+    @pyqtSlot()
+    def run(self):
+        for i in range(100):
+            time.sleep(0.01)
+            print(i)
+
+'''
+    ----------------------------------------------------------------------------
+'''
+
 
 if __name__ == '__main__':
+    
+    # My app
     app = QApplication(sys.argv)
     m_m = match_maker()
-    f = io.StringIO() 
-    # mm = MatchMakr(m_m, f)
-    # m_m.set_printer(mm.run_frame.append_text)
-    # mm.show()
-    # sys.exit(app.exec_())
+    mm = MatchMakr(m_m)
+    mm.show()
     
-    f = io.StringIO()    
-    with redirect_stdout(f):
-        mm = MatchMakr(m_m, f)
-        mm.show()
-        sys.exit(app.exec_())
+    
+    # Create Queue and redirect sys.stdout to this queue
+    queue = Queue()
+    sys.stdout = WriteStream(queue)
+    
+    # Create QApplication and QWidget
+    # qapp = QApplication(sys.argv)  
+    # app = MyApp()
+    # app.show()    
+    
+    # Create thread that will listen on the other end of the queue, and send the text to the textedit in our application
+    thread = QThread()
+    my_receiver = MyReceiver(queue)
+    my_receiver.mysignal.connect(mm.append_text)
+    my_receiver.moveToThread(thread)
+    thread.started.connect(my_receiver.run)
+    thread.start()
+    
+    # app.exec_()
+    sys.exit(app.exec_())
+    # f = DataStream(sys.stdout)
+    
+    # f = io.StringIO() 
+    # # mm = MatchMakr(m_m, f)
+    # # m_m.set_printer(mm.run_frame.append_text)
+    # # mm.show()
+    # # sys.exit(app.exec_())
+    
+    # with redirect_stdout(f):
+    #     f2 = DataStream(f)
+    #     mm = MatchMakr(m_m, f2)
+    #     mm.show()
+    #     sys.exit(app.exec_())

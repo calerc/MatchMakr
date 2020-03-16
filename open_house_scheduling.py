@@ -12,7 +12,7 @@ import numpy as np
 import csv
 import warnings
 import multiprocessing
-
+import time
 from ipdb import set_trace
 
 
@@ -1317,6 +1317,8 @@ class match_maker():
     
             else:
                 self.print('-------- Solver failed! --------')
+                
+            self.print('-------- Matches Made! --------')
 
     '''
         Convert the boolean matrix to a string matrix
