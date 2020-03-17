@@ -324,12 +324,12 @@ class RunFrame(QFrame):
         
         self.bt_validate = add_button(self, 'Validate', self.validate)
         self.bt_run = add_button(self, 'Run', self.run)
-        self.bt_interrupt = add_button(self, 'Interrupt', self.q_main_window.start_thread)
+        self.bt_interrupt = add_button(self, 'Interrupt', self.interrupt)
         self.bt_clear = add_button(self, 'Clear Output', self.clear_output)
         self.bt_remove_results = add_button(self, 'Remove Results', self.remove_results)    
     
     def interrupt(self):
-        self.stop_running = True
+        self.q_main_window.match_maker.stopSearch()
         
     def validate(self):
         t = threading.Thread(target=self.q_main_window.match_maker.validate)
@@ -423,7 +423,6 @@ class MatchMakr(QMainWindow):
         
         # Output
         self.run_frame = RunFrame(self)
-        # self.output = QTextEdit(self.stacked_widget)
         
         # Settings Frame               
         self.settings_frame = SettingsFrame(self.stacked_widget)
@@ -438,11 +437,7 @@ class MatchMakr(QMainWindow):
         self.setWindowTitle("MatchMakr - Match Interviewers with Interviewees")
         
         # Match_maker
-        self.match_maker = match_maker
-        
-        # self.app = app
-        
-        
+        self.match_maker = match_maker        
     
     def settings_callback(self):
         self.stacked_widget.setCurrentWidget(self.settings_frame)
@@ -513,13 +508,13 @@ class MatchMakr(QMainWindow):
         bottom = self.run_frame.output.verticalScrollBar().maximum()
         self.run_frame.output.verticalScrollBar().setValue(bottom)
         
-    @pyqtSlot()
-    def start_thread(self):
-        self.thread = QThread()
-        self.long_running_thing = LongRunningThing()
-        self.long_running_thing.moveToThread(self.thread)
-        self.thread.started.connect(self.long_running_thing.run)
-        self.thread.start()
+    # @pyqtSlot()
+    # def start_thread(self):
+    #     self.thread = QThread()
+    #     self.long_running_thing = LongRunningThing()
+    #     self.long_running_thing.moveToThread(self.thread)
+    #     self.thread.started.connect(self.long_running_thing.run)
+    #     self.thread.start()
                         
                 
         

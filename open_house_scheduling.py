@@ -7,6 +7,8 @@ import sys
 from os import path, makedirs
 from ortools.sat import sat_parameters_pb2
 from ortools.sat.python import cp_model
+from ortools.sat.python.cp_model import EvaluateLinearExpression
+from ortools.sat import pywrapsat
 from reportlab.pdfgen import canvas
 import numpy as np
 import csv
@@ -14,6 +16,7 @@ import warnings
 import multiprocessing
 import time
 from ipdb import set_trace
+import threading
 
 
 
@@ -74,7 +77,33 @@ from ipdb import set_trace
     KNOWN BUGS:
         bin_needed = bin_needed[0][0] - IndexError: index 0 is out of bounds for axis 0 with size 0
             This doesn't affect fitting, but it won't allow for output
-'''      
+'''
+
+class ORSolver(cp_model.CpSolver):
+
+    def __init__(self):
+        super(ORSolver, self).__init__()
+        self.status = None
+        
+    def SolveWithSolutionCallback(self, model, callback):
+        """Solves a problem and pass each solution found to the callback."""
+        self.__solution = (
+            pywrapsat.SatHelper.SolveWithParametersAndSolutionCallback(
+                model.ModelProto(), self.parameters, callback))
+        
+        status = self.__solution.status
+        status = self.StatusName(status)
+        self.status = status
+        
+        return status
+    
+    def return_status(self):
+        return self.status
+    
+    def Value(self, expression):
+        return EvaluateLinearExpression(expression, self.__solution)
+        # set_trace()
+        # return super(ORSolver, self).Value(expression)
 
 class match_maker():
 
@@ -213,6 +242,10 @@ class match_maker():
 
         # Check parameter validity
         input_checker(self)
+        
+        # Interrupt
+        empty_func = lambda : 'No action taken'
+        self.stopSearch = empty_func()
         
         
 
@@ -1268,9 +1301,10 @@ class match_maker():
                         for i in self.all_interviews))
     
             # Creates the solver and solve.
-            self.print('Building Model...')
-            solver = cp_model.CpSolver()
-            solution_printer = VarArrayAndObjectiveSolutionPrinter(self)
+            self.print('Building Model...') 
+            # solver = cp_model.CpSolver()
+            solver = ORSolver()
+            solution_printer = VarArrayAndObjectiveSolutionPrinter(self)           
     
             self.print('Setting up workers...')
             self.get_cpu_2_use()
@@ -1279,23 +1313,27 @@ class match_maker():
             solver.parameters.max_time_in_seconds = self.MAX_SOLVER_TIME_SECONDS
     
             self.print('Solving model...')
-            status = solver.SolveWithSolutionCallback(model, solution_printer)
-    
-            self.print(solver.StatusName(status))
+            t = threading.Thread(target=solver.SolveWithSolutionCallback, args=(model, solution_printer))
+            t.start()
+            self.stopSearch = solution_printer.StopSearch
+            
+            t.join()
+            status = solver.return_status()
+            self.print(status)
     
             # Collect results
-            if solver.StatusName(status) == 'FEASIBLE' or solver.StatusName(
-                    status) == 'OPTIMAL':
+            if status == 'FEASIBLE' or status == 'OPTIMAL':
                 results = np.empty(
                     (self.NUM_INTERVIEWS,
                      self.num_students,
                      self.num_faculty))
                 for i in self.all_interviews:
                     for p in self.all_faculty:
-                        for s in self.all_students:
+                        for s in self.all_students:                            
                             results[i][s][p] = solver.Value(
                                 self.interview[(p, s, i)])
-    
+                
+                    
                 # Save the results
                 self.results = results
                 self.solver = solver
@@ -1317,9 +1355,9 @@ class match_maker():
     
             else:
                 self.print('-------- Solver failed! --------')
-                
+            
+            
             self.print('-------- Matches Made! --------')
-
     '''
         Convert the boolean matrix to a string matrix
     '''
