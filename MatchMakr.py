@@ -2,28 +2,99 @@ import sys
 from PyQt5.QtCore import Qt, pyqtSlot, QObject, pyqtSignal, QTextStream, QThread
 from PyQt5.QtWidgets import QMainWindow, QDockWidget, QListWidget, QHBoxLayout, QVBoxLayout, QSpacerItem, QListWidgetItem
 from PyQt5.QtWidgets import QApplication, QTextEdit, QAction, QPushButton, QFrame, QGridLayout, QSizePolicy, QLabel
-from PyQt5.QtWidgets import QStackedWidget, QFileDialog, QSpinBox, QCheckBox, QLineEdit, QMessageBox, QWidget
-from itertools import product
+from PyQt5.QtWidgets import QStackedWidget, QFileDialog, QSpinBox, QCheckBox, QLineEdit, QMessageBox, QWidget, QStatusBar
 from ipdb import set_trace
 from os import getcwd
 from os.path import join
 import yaml
 import shutil
-from match_maker import match_maker
-from contextlib import redirect_stdout
-import io
-import time
+from match_maker import match_maker, input_checker_no_throw
 import threading
 from queue import Queue
+from time import sleep
 
 '''
     TODO:
-        Apply settings
-            Send to matchmaker
-        Implement interrupt
         Create icon
+        Dont let dock be closed
+        Add Status Bar
+        Print errors to screen
+        Stop Freezing of interrupt
 '''
+class Makr2Maker():
+
+    def __init__(self, matchMakr):
+        self.match_maker = matchMakr.match_maker
+        self.matchMakr = matchMakr
         
+    def apply_settings(self):
+        settings_dict = self.matchMakr.get_settings_dict()
+        
+        conversion_dict = {
+                            'USE_FACULTY_AVAILABILITY' : 'cb_fac_avail',
+                            'PRINT_FACULTY_PREFERENCE' : 'cb_print_fac_pref',
+                            'PRINT_STUDENT_PREFERENCE' : 'cb_print_stud_pref',
+                            'USE_INTERVIEW_LIMITS' : 'cb_use_inter_limits',
+                            'USE_STUDENT_AVAILABILITY' : 'cb_stud_avail',
+                            'USE_RANKING' : 'cb_use_rank',
+                            'CHECK_FREQUENCY' : 'sb_check_freq',
+                            'EMPTY_PENALTY' : 'sb_empty_penalty',
+                            'CHOICE_EXPONENT' : 'sb_exp',
+                            'FACULTY_ADVANTAGE' : 'sb_fac_advantage',
+                            'FACULTY_SIMILARITY_WEIGHT' : 'sb_fac_sim_weight',
+                            'LUNCH_PENALTY' :'sb_lunch_penalty',
+                            'LUNCH_PERIOD' :'sb_lunch_period',
+                            'MAX_INTERVIEWS' : 'sb_max_num_inter',
+                            'MIN_INTERVIEWS' : 'sb_min_num_inter',
+                            'NUM_SUGGESTIONS' : 'sb_num_extra_matches',
+                            'NUM_INTERVIEWS' : 'sb_num_inter',
+                            'NUM_PREFERENCES_2_CHECK' : 'sb_num_pref_2_check',
+                            'NUM_SIMILAR_FACULTY' : 'sb_num_sim_fac',
+                            'RECRUITING_WEIGHT' : 'sb_recruit_weight',
+                            'TRACK_WEIGHT' : 'sb_track_weight',
+                            'FACULTY_AVAILABILITY_NAME' : 'tb_fac_avail',
+                            'FACULTY_PREF' : 'tb_fac_pref',
+                            'FACULTY_SCHEDULES_DIR' : 'tb_fac_sched_dir',
+                            'LOG_FILE_NAME' : 'tb_log_name',
+                            'PATH' : 'tb_path',
+                            'STUDENT_AVAILABILITY_NAME' : 'tb_stud_avail',
+                            'STUDENT_PREF' : 'tb_stud_pref',
+                            'STUDENT_SCHEDULES_DIR' : 'tb_stud_sched_dir'
+                           }
+        
+        for key, value in zip(conversion_dict.keys(), conversion_dict.values()):
+            val = settings_dict[value]            
+            setattr(self.match_maker, key, val)
+            
+        # Set parameters that can't be done programmatically
+        self.match_maker.MATCHES_CSV_FILE = settings_dict['tb_match'] + '.csv'
+        self.match_maker.MATCHES_TXT_FILE = settings_dict['tb_match'] + '.txt'
+        self.match_maker.RESULTS_PATH = join(settings_dict['tb_path'], settings_dict['tb_results_dir'])
+        
+        # Set use parameters based on weights
+        if self.match_maker.FACULTY_SIMILARITY_WEIGHT == 0:
+            self.match_maker.USE_FACULTY_SIMILARITY = False
+        else:
+            self.match_maker.USE_FACULTY_SIMILARITY = True
+        
+        if self.match_maker.LUNCH_PENALTY == 0:
+            self.match_maker.USE_WORK_LUNCH = False
+        else:
+            self.match_maker.USE_WORK_LUNCH = True
+        
+        if self.match_maker.NUM_PREFERENCES_2_CHECK == 0:
+            self.match_maker.USE_EXTRA_SLOTS = False
+        else:
+            self.match_maker.USE_EXTRA_SLOTS = True
+            
+        if self.match_maker.NUM_SIMILAR_FACULTY == 0:
+            self.match_maker.USE_FACULTY_SIMILARITY = False
+        else:
+            self.match_maker.USE_FACULTY_SIMILARITY = True
+        
+        print('Checking settings before applying...')
+        input_checker_no_throw(self.match_maker)
+            
 
 class Dock(QListWidget):
     
@@ -89,10 +160,14 @@ class SettingsFrame(QFrame):
         self.define_settings()
              
     def save_settings(self):
+        self.q_main_window.parent().statusBar.showMessage('Saving Settings...')
         self.q_main_window.parent().save_settings()
+        self.q_main_window.parent().statusBar.showMessage('Done')
         
     def load_settings(self):
+        self.q_main_window.parent().statusBar.showMessage('Loading Settings...')
         self.q_main_window.parent().load_settings()
+        self.q_main_window.parent().statusBar.showMessage('Done')
 
     def define_settings(self):
         self.define_labels()
@@ -195,7 +270,6 @@ class SettingsFrame(QFrame):
         # Buttons
         self.bt_load = add_button(self, 'Load Settings', self.load_settings)
         self.bt_save = add_button(self, 'Save Settings', self.save_settings)
-
           
 class AdvancedSettingsFrame(SettingsFrame):
     
@@ -215,6 +289,7 @@ class AdvancedSettingsFrame(SettingsFrame):
         self.add_label("Use Faculty Availabitily:")
         self.add_label("Print Student Preferences:")
         self.add_label("Print Faculty Preferences:")
+        self.add_label("Use Interview Limits:")
         
         self.add_label("Choice Exponent:")
         self.add_label("Lunch Penalty:")
@@ -241,6 +316,7 @@ class AdvancedSettingsFrame(SettingsFrame):
         self.cb_fac_avail = self.add_widget(QCheckBox)
         self.cb_print_stud_pref = self.add_widget(QCheckBox)
         self.cb_print_fac_pref = self.add_widget(QCheckBox)
+        self.cb_use_inter_limits = self.add_widget(QCheckBox)
         
         # Spin Boxes        
         self.sb_exp = self.add_widget(QSpinBox)
@@ -265,6 +341,7 @@ class AdvancedSettingsFrame(SettingsFrame):
         self.cb_fac_avail.setChecked(True)
         self.cb_print_stud_pref.setChecked(False)
         self.cb_print_fac_pref.setChecked(True)
+        self.cb_use_inter_limits.setChecked(True)
         
         # Spin boxes (numbers)
         self.set_min_max_def(self.sb_exp, 0, 10, 4)
@@ -300,7 +377,8 @@ class RunFrame(QFrame):
         self.define_text_output()
         
         # Running
-        self.stop_running = False
+        # self.stop_running = False
+        self.m2m = Makr2Maker(self.q_main_window)
     
     def update_text_listener(self, is_same, new_string):        
         if is_same == '0':
@@ -329,15 +407,24 @@ class RunFrame(QFrame):
         self.bt_remove_results = add_button(self, 'Remove Results', self.remove_results)    
     
     def interrupt(self):
+        self.q_main_window.is_interrupting = True
+        self.q_main_window.statusBar.showMessage('Interrupting')
         self.q_main_window.match_maker.stopSearch()
+        self.q_main_window.match_maker.is_running = False
+        self.q_main_window.statusBar.showMessage('Matchmaking Interrupted')
+        self.q_main_window.is_interrupting = False
         
     def validate(self):
+        self.q_main_window.statusBar.showMessage('Validating...')
+        self.m2m.apply_settings()
         t = threading.Thread(target=self.q_main_window.match_maker.validate)
-        t.start()        
+        t.start()      
     
     def run(self):
+        self.m2m.apply_settings()
         t = threading.Thread(target=self.q_main_window.match_maker.main)
         t.start()
+        # self.q_main_window.is_running = False
     
     def clear_output(self):
         self.output.setText('')
@@ -350,7 +437,6 @@ class RunFrame(QFrame):
         
         def callback(button_pressed):
             text = button_pressed.text()
-            print(text)
             if button_pressed.text() == '&OK':
                 try:
                     shutil.rmtree(self.dir_to_remove)
@@ -369,7 +455,6 @@ class RunFrame(QFrame):
         dialog.buttonClicked.connect(callback)
         dialog.exec_()
         
-        
     def define_text_output(self):
         self.output.setReadOnly(True)
         self.resize_text_output()
@@ -378,26 +463,7 @@ class RunFrame(QFrame):
         frame_width = self.output_frame.width()
         frame_height = self.output_frame.height()
         self.output.resize(frame_width, frame_height)
-        
-    def append_text(self, string):
-        self.output.insertPlainText(string)
-
-class IOChecker(QTextEdit):
-    has_changed= pyqtSignal('QString')
-    
-    def __init__(self, parent, f):
-        super(IOChecker, self).__init__(parent)
-        self.f = f
-        
-    def connect_and_emit_has_changed(self, string):
-        self.has_changed.connect(self.detect_change)
-        self.has_changed.emit()
-        
-    def detect_change(self, f):
-        print("Slot Called")
-        if f != self.f:
-            print("Has Changed")
-    
+  
 
 class MatchMakr(QMainWindow):
     
@@ -410,6 +476,9 @@ class MatchMakr(QMainWindow):
         self.top = 10
         self.width = 640
         self.height = 480
+        
+        # Match_maker
+        self.match_maker = match_maker
         
         # Workflow
         self.items = QDockWidget("Workflow", self)
@@ -431,13 +500,21 @@ class MatchMakr(QMainWindow):
         self.stacked_widget.addWidget(self.advanced_settings_frame)
         self.stacked_widget.addWidget(self.run_frame)
         
+        # Status bar
+        self.statusBar = QStatusBar()
+        self.setStatusBar(self.statusBar)
+        self.statusBar.showMessage('Waiting...')
+        self.is_interrupting = False
+        self.is_running = False
+        
         # Other GUI Setup
+        t = threading.Thread(target=self.thread_update_progress_bar)
+        t.start()
         self.setCentralWidget(self.stacked_widget)
         self.stacked_widget.setCurrentWidget(self.settings_frame)
         self.setWindowTitle("MatchMakr - Match Interviewers with Interviewees")
         
-        # Match_maker
-        self.match_maker = match_maker        
+                
     
     def settings_callback(self):
         self.stacked_widget.setCurrentWidget(self.settings_frame)
@@ -456,7 +533,7 @@ class MatchMakr(QMainWindow):
         filename = filename[0]
         if filename == '':
             return
-        print('Saving to file: ' + filename)
+        print('Loading Settings from file: ' + filename)
         
         with open(filename, 'r') as f:
             settings_dictionary = yaml.safe_load(f)
@@ -475,8 +552,8 @@ class MatchMakr(QMainWindow):
                         widget.setChecked(value)
                     elif prefix == 'sb_':
                         widget.setValue(value)
-        
-    def save_settings(self):
+                        
+    def get_settings_dict(self):
         settings = [self.settings_frame, self.advanced_settings_frame]        
         settings_dictionary = {}
         
@@ -492,6 +569,12 @@ class MatchMakr(QMainWindow):
                     settings_dictionary[key] = value.isChecked()
                 elif prefix == 'sb_':
                     settings_dictionary[key] = value.value()
+                    
+        return settings_dictionary
+        
+    def save_settings(self):      
+        
+        settings_dictionary = self.get_settings_dict()        
         
         filename = QFileDialog.getSaveFileName(self, 'Select File', getcwd(), 'YAML Files (*.yaml)')
         filename = filename[0]
@@ -504,18 +587,42 @@ class MatchMakr(QMainWindow):
             
     @pyqtSlot(str)        
     def append_text(self, text):
-        self.run_frame.output.insertPlainText(text)
+    #     t = threading.Thread(target=self.thread_append_text, args=(text,))
+    #     t.start()
+        
+    # def thread_append_text(self, text):
         bottom = self.run_frame.output.verticalScrollBar().maximum()
         self.run_frame.output.verticalScrollBar().setValue(bottom)
+        self.run_frame.output.insertPlainText(text)
         
-    # @pyqtSlot()
-    # def start_thread(self):
-    #     self.thread = QThread()
-    #     self.long_running_thing = LongRunningThing()
-    #     self.long_running_thing.moveToThread(self.thread)
-    #     self.thread.started.connect(self.long_running_thing.run)
-    #     self.thread.start()
-                        
+        
+    
+    def thread_update_progress_bar(self):
+        SLEEP_TIME = 0.1
+        
+        while True:
+            if self.match_maker.is_running and not self.is_interrupting:
+                self.statusBar.showMessage('Running')
+                sleep(SLEEP_TIME)
+                self.statusBar.showMessage('Running.')
+                sleep(SLEEP_TIME)
+                self.statusBar.showMessage('Running..')
+                sleep(SLEEP_TIME)
+                self.statusBar.showMessage('Running...')
+                sleep(SLEEP_TIME)
+            elif self.is_interrupting:
+                self.statusBar.showMessage('Interrupting')
+                sleep(SLEEP_TIME)
+                self.statusBar.showMessage('Interrupting.')
+                sleep(SLEEP_TIME)
+                self.statusBar.showMessage('Interrupting..')
+                sleep(SLEEP_TIME)
+                self.statusBar.showMessage('Interrupting...')
+                sleep(SLEEP_TIME)
+                
+                
+                
+                               
                 
         
     def close_application(self):
@@ -567,12 +674,12 @@ class MyReceiver(QObject):
             self.mysignal.emit(text)
 
 # An example QObject (to be run in a QThread) which outputs information with print
-class LongRunningThing(QObject):
-    @pyqtSlot()
-    def run(self):
-        for i in range(100):
-            time.sleep(0.01)
-            print(i)
+# class LongRunningThing(QObject):
+#     @pyqtSlot()
+#     def run(self):
+#         for i in range(100):
+#             time.sleep(0.01)
+#             print(i)
 
 '''
     ----------------------------------------------------------------------------
@@ -590,6 +697,7 @@ if __name__ == '__main__':
     # Create Queue and redirect sys.stdout to this queue
     queue = Queue()
     sys.stdout = WriteStream(queue)
+    sys.stderr = WriteStream(queue)
     
     # Create thread that will listen on the other end of the queue, and send the text to the textedit in our application
     thread = QThread()
