@@ -5,20 +5,15 @@ import sys
 from os import path, makedirs
 from ortools.sat import sat_parameters_pb2
 from ortools.sat.python import cp_model
-from ortools.sat.python.cp_model import EvaluateLinearExpression
-from ortools.sat import pywrapsat
-from reportlab.pdfgen import canvas
+from pdf_writer import PDFWriter
+from input_checker import InputCheckerNoThrow
+from my_or_tools import VarArrayAndObjectiveSolutionPrinter, ORSolver
 import numpy as np
 import csv
 import warnings
 import multiprocessing
-# import time
 from ipdb import set_trace
 import threading
-
-
-
-
 
 
 '''
@@ -77,29 +72,7 @@ import threading
             This doesn't affect fitting, but it won't allow for output
 '''
 
-class ORSolver(cp_model.CpSolver):
 
-    def __init__(self):
-        super(ORSolver, self).__init__()
-        self.status = None
-        
-    def SolveWithSolutionCallback(self, model, callback):
-        """Solves a problem and pass each solution found to the callback."""
-        self.__solution = (
-            pywrapsat.SatHelper.SolveWithParametersAndSolutionCallback(
-                model.ModelProto(), self.parameters, callback))
-        
-        status = self.__solution.status
-        status = self.StatusName(status)
-        self.status = status
-        
-        return status
-    
-    def return_status(self):
-        return self.status
-    
-    def Value(self, expression):
-        return EvaluateLinearExpression(expression, self.__solution)
 
 class match_maker():
 
@@ -125,10 +98,6 @@ class match_maker():
         self.MATCHES_TXT_NAME = 'matches.txt'
         self.STUDENT_SCHEDULES_DIR = 'student_schedules'
         self.FACULTY_SCHEDULES_DIR = 'faculty_schedules'
-        
-        # Make the necessary paths
-        if not path.isdir(self.RESULTS_PATH):
-            makedirs(self.RESULTS_PATH)
 
         # Number of interviews
         self.NUM_INTERVIEWS = 9            # Range [0, Inf) suggested = 10
@@ -241,9 +210,10 @@ class match_maker():
         empty_func = lambda : 'No action taken'
         self.stopSearch = empty_func
         self.is_running = False
+        self.is_validating = False
         
         # Check parameter validity
-        input_checker_no_throw(self)
+        # InputCheckerNoThrow(self)
         
         
 
@@ -912,9 +882,15 @@ class match_maker():
         faculty_match_data = np.asarray(faculty_match_data)
                 
         # Match the names nicely
+        if 'Full Name' not in faculty_match_data[0]:
+            print('Full Name Data Not Found for Faculty')
+            return
         faculty_col = np.where(faculty_match_data[0] == 'Full Name')[0][0]
         self.nice_faculty_names = np.copy(faculty_match_data[1:, faculty_col])
         
+        if 'Full Name' not in stud_match_data[0]:
+            print('Full Name Data Not Found for Students')
+            return
         student_col = np.where(stud_match_data[0] == 'Full Name')[0][0]
         self.nice_student_names = np.copy(stud_match_data[1:, student_col])
         
@@ -1191,19 +1167,34 @@ class match_maker():
         
         # Check parameter validity
         self.is_running = True
-        input_checker_no_throw(self)        
+        icnot = InputCheckerNoThrow(self)
+        if not icnot.can_continue:
+            self.is_running = False
+            return       
+                
+        # Make the necessary paths
+        if not path.isdir(self.RESULTS_PATH):
+            makedirs(self.RESULTS_PATH)
         
-        with open(path.join(self.RESULTS_PATH, self.LOG_FILE_NAME), 'w') as self.log_file:
-
+        log_path = path.join(self.RESULTS_PATH, self.LOG_FILE_NAME)       
+        with open(log_path, 'w') as self.log_file:
+            
             # Log the attributes used to make the matches
             self.print_atributes()
+            
+            # Load data
+            self.load_data()
+            if self.is_validating:
+                self.is_running = False
+                return
+            
+            
             
             # Creates the model.
             model = cp_model.CpModel()
     
             # Get objective matrix
-            # self.define_random_matches()
-            self.load_data()
+            # self.define_random_matches()            
             self.calc_ranking()
             objective_matrix = self.objective_matrix
     
@@ -1495,7 +1486,7 @@ class match_maker():
         moderate_threshold = ((0.25 * self.MAX_INTERVIEWS) ** self.CHOICE_EXPONENT) * 100
         
         # Initialize the PDF file
-        pw = pdf_writer()
+        pw = PDFWriter()
 
         # Print the results
         for count, name in enumerate(names1):
@@ -1646,372 +1637,41 @@ class match_maker():
     
     def validate(self):
         
-        # Check parameter validity
-        icnot = input_checker_no_throw(self)
-        if not icnot.can_continue:
-            print('ERRRORS FOUND!')
-            print('Check Output')
-            return
-        
-        path_to_use = path.join(self.RESULTS_PATH, self.LOG_FILE_NAME)
-        if not path.exists(path_to_use):
-            print('Path does not exist: ' + path_to_use)
-            return
-        
-        with open(path_to_use, 'w') as self.log_file:
-    
-            # Log the attributes used to make the matches
-            self.print_atributes()
-            self.load_data()
-            
-        print(' ------------- Validation Completed with no errors ------------- ')
-    
-
-
-'''
-    VarArrayAndObjectiveSolutionPrinter
-    callback printer object for ortools solver
-'''
-
-
-class VarArrayAndObjectiveSolutionPrinter(cp_model.CpSolverSolutionCallback):
-
-    ''' Print intermediate solutions. '''
-
-    def __init__(self, match_maker):
-
-        cp_model.CpSolverSolutionCallback.__init__(self)
-
-        self.match_maker = match_maker
-        self.variables = match_maker.interview
-
-        self.CHECK_MATCHES = self.match_maker.CHECK_MATCHES
-        self.CHECK_FREQUENCY = self.match_maker.CHECK_FREQUENCY
-
-        if self.CHECK_MATCHES:
-            self.last_stud_percent = np.zeros(
-                (1, self.match_maker.NUM_PREFERENCES_2_CHECK))
-            self.last_faculty_percent = np.zeros(
-                (1, self.match_maker.NUM_PREFERENCES_2_CHECK))
-
-        self.__solution_count = 0
-
-    def on_solution_callback(self):
-
-        # Get sizes
-        num_faculty = self.match_maker.num_faculty
-        num_students = self.match_maker.num_students
-        num_interviews = self.match_maker.NUM_INTERVIEWS
-
-        # Print objective value
-        text = 'Solution %i' % self.__solution_count
-        try:
-            self.match_maker.print(text)
-        except Exception as e:
-            print('Error!')
-            print(e)
-        text = '  objective value = %i' % self.ObjectiveValue()
-        try:
-            self.match_maker.print(text)
-        except Exception as e:
-            print('Error!')
-            print(e)
-
-        # Determine what matches were made
-        if self.CHECK_MATCHES and (
-                self.__solution_count %
-                self.CHECK_FREQUENCY == 0):
-
-            values = np.empty((num_students, num_faculty, num_interviews))
-            for p in range(num_faculty):
-                for s in range(num_students):
-                    for i in range(num_interviews):
-                        the_key = (p, s, i)
-                        the_variable = self.variables[the_key]
-                        values[s, p, i] = self.Value(the_variable)
-
-            values = np.asarray(values)
-
-            # Determine number of matches made for preferences
-            matches = np.sum(values, axis=2)
-            self.match_maker.check_preferences(matches)
-
-        self.__solution_count += 1
-
-    def solution_count(self):
-        return self.__solution_count
-
-
-'''
-    input_checker
-    Checks input to the match_maker class to make sure they are reasonable
-    Call input_checker(match_maker) as the last line of match_maker.__init__
-    If no errors result, the match_maker program can continue
-'''
-
-
-
-
-class input_checker:
-
-    def __init__(self, match_maker):
-        self.mm = match_maker
+        self.is_validating = True
+        print('Errors will appear here:')
+        print('-----------------------------------------------------------------')
         self.main()
-
-    def check_bool(self, parameter):
-        return isinstance(parameter, bool)
-
-    def check_file_exists(self, file_name):
-        if not isinstance(file_name, str):
-            return False
-
-        full_path = path.join(self.mm.PATH, file_name)
-        return path.isfile(full_path)
-
-    def check_positive_int(self, parameter):
-        if isinstance(parameter, int):
-            return parameter >= 0
-        return False
-
-    def check_range_int(self, parameter, lower_bound, upper_bound):
-        if isinstance(parameter, int):
-            return (parameter >= lower_bound and parameter <= upper_bound)
-        return False
-
-    def main(self):
-
-        # Check that files exist
-        file_names = [
-            self.mm.STUDENT_PREF,
-            self.mm.FACULTY_PREF,
-            self.mm.TIMES_NAME,
-            self.mm.FACULTY_AVAILABILITY_NAME,
-            self.mm.STUDENT_AVAILABILITY_NAME]
-
-        for file in file_names:
-            if not self.check_file_exists(file):
-                raise ValueError(file + ' is not on the path ' + self.mm.PATH)
-
-        # Check bools
-        if not self.check_bool(self.mm.USE_INTERVIEW_LIMITS):
-            raise ValueError('USE_INTERVIEW_LIMITS' + ' should be a bool')
-
-        if not self.check_bool(self.mm.USE_EXTRA_SLOTS):
-            raise ValueError('USE_EXTRA_SLOTS' + ' should be a bool')
-
-        if not self.check_bool(self.mm.USE_RANKING):
-            raise ValueError('USE_RANKING' + ' should be a bool')
-
-        if not self.check_bool(self.mm.USE_WORK_LUNCH):
-            raise ValueError('USE_WORK_LUNCH' + ' should be a bool')
-
-        if not self.check_bool(self.mm.USE_RECRUITING):
-            raise ValueError('USE_RECRUITING' + ' should be a bool')
-
-        if not self.check_bool(self.mm.USE_STUDENT_AVAILABILITY):
-            raise ValueError('USE_STUDENT_AVAILABILITY' + ' should be a bool')
-            
-        if not self.check_bool(self.mm.USE_FACULTY_AVAILABILITY):
-            raise ValueError('USE_FACULTY_AVAILABILITY' + ' should be a bool')
-
-        if not self.check_bool(self.mm.USE_FACULTY_SIMILARITY):
-            raise ValueError('USE_FACULTY_SIMILARITY' + ' should be a bool')
-
-        if not self.check_bool(self.mm.CHECK_MATCHES):
-            raise ValueError('CHECK_MATCHES' + ' should be a bool')
-
-        if not self.check_bool(self.mm.PRINT_STUD_PREFERENCE):
-            raise ValueError('PRINT_STUD_PREFERENCE' + ' should be a bool')
-            
-        if not self.check_bool(self.mm.PRINT_FACULTY_PREFERENCE):
-            raise ValueError('PRINT_FACULTY_PREFERENCE' + ' should be a bool')    
+        print('-----------------------------------------------------------------')
+        self.is_validating = False
         
-
-        # Check positive ints
-        if not self.check_positive_int(self.mm.NUM_INTERVIEWS):
-            raise ValueError(
-                'NUM_INTERVIEWS' +
-                ' should be a non-negative integer')
-
-        if not self.check_positive_int(self.mm.MIN_INTERVIEWS):
-            raise ValueError(
-                'MIN_INTERVIEWS' +
-                ' should be a non-negative integer')
-
-        if not self.check_positive_int(self.mm.MAX_INTERVIEWS):
-            raise ValueError(
-                'MAX_INTERVIEWS' +
-                ' should be a non-negative integer')
-
-        if not self.check_positive_int(self.mm.MAX_RANKING):
-            raise ValueError(
-                'MAX_RANKING' +
-                ' should be a non-negative integer')
-
-        if not self.check_positive_int(self.mm.CHOICE_EXPONENT):
-            raise ValueError(
-                'CHOICE_EXPONENT' +
-                ' should be a non-negative integer')
-
-        if not self.check_positive_int(self.mm.LUNCH_PENALTY):
-            raise ValueError(
-                'LUNCH_PENALTY' +
-                ' should be a non-negative integer')
-
-        if not self.check_positive_int(self.mm.RECRUITING_WEIGHT):
-            raise ValueError(
-                'RECRUITING_WEIGHT' +
-                ' should be a non-negative integer')
-
-        if not self.check_positive_int(self.mm.TRACK_WEIGHT):
-            raise ValueError(
-                'TRACK_WEIGHT' +
-                ' should be a non-negative integer')
-
-        if not self.check_positive_int(self.mm.FACULTY_SIMILARITY_WEIGHT):
-            raise ValueError(
-                'FACULTY_SIMILARITY_WEIGHT' +
-                ' should be a non-negative integer')
-
-        if not self.check_positive_int(self.mm.NUM_SUGGESTIONS):
-            raise ValueError(
-                'NUM_SUGGESTIONS' +
-                ' should be a non-negative integer')
-
-        if not self.check_positive_int(self.mm.CHECK_FREQUENCY):
-            raise ValueError(
-                'CHECK_FREQUENCY' +
-                ' should be a non-negative integer')
-
-        if not self.check_positive_int(self.mm.MAX_SOLVER_TIME_SECONDS):
-            raise ValueError(
-                'MAX_SOLVER_TIME_SECONDS' +
-                ' should be a non-negative integer')
-
-        if not self.check_positive_int(self.mm.RAND_NUM_STUDENTS):
-            raise ValueError(
-                'RAND_NUM_STUDENTS' +
-                ' should be a non-negative integer')
-
-        if not self.check_positive_int(self.mm.RAND_NUM_FACULTY):
-            raise ValueError(
-                'RAND_NUM_FACULTY' +
-                ' should be a non-negative integer')
-
-        if not self.check_positive_int(self.mm.RAND_NUM_INTERVIEWS):
-            raise ValueError(
-                'RAND_NUM_INTERVIEWS' +
-                ' should be a non-negative integer')
-
-        if not self.check_positive_int(self.mm.EMPTY_PENALTY):
-            raise ValueError(
-                'EMPTY_PENALTY' +
-                ' should be a non-negative integer')
-
-        # Check ranged ints
-        if not self.check_range_int(self.mm.FACULTY_ADVANTAGE, 0, 100):
-            raise ValueError(
-                'FACULTY_ADVANTAGE' +
-                ' should be an integer between ' +
-                '0' +
-                ' and ' +
-                '100')
-
-        if not self.check_range_int(
-                self.mm.LUNCH_PERIOD,
-                0,
-                self.mm.NUM_INTERVIEWS):
-            raise ValueError('LUNCH_PERIOD' + ' should be an integer between '
-                             + '0' + ' and ' + 'NUM_INTERVIEWS')
-
-        if not self.check_range_int(
-                self.mm.NUM_PREFERENCES_2_CHECK,
-                0,
-                self.mm.NUM_INTERVIEWS):
-            raise ValueError(
-                'NUM_PREFERENCES_2_CHECK' +
-                ' should be an integer between ' +
-                '0' +
-                ' and ' +
-                'NUM_INTERVIEWS')
-
-        # Check other parameters
-        if self.mm.AVAILABILITY_VALUE != -1 * 5000:
-            warnings.warn(
-                'We detected that AVAILABILITY_VALUE does not equal -1 * 5000.  This can cause issues.')
-
-class input_checker_no_throw(input_checker):
+        # # Check parameter validity
+        # icnot = InputCheckerNoThrow(self)
+        # if not icnot.can_continue:
+        #     print('ERRRORS FOUND!')
+        #     print('Check Output')
+        #     return
+        
+        # path_to_use = path.join(self.RESULTS_PATH, self.LOG_FILE_NAME)
+        # if not path.exists(path_to_use):
+        #     print('Path does not exist: ' + path_to_use)
+        #     return
+        
+        # with open(path_to_use, 'w') as self.log_file:
     
-    def __init__(self, match_maker):
-        self.mm = match_maker
-        try:
-            self.main()
-            self.can_continue = True
-        except Exception as e:
-            print('Checking settings before applying...')
-            print('Errors (Empty if None)')
-            print('----------------------------------------------------------------------------------------')
-            print(e)
-            print('----------------------------------------------------------------------------------------')
-            print('')
-            self.can_continue = False
+        #     # Log the attributes used to make the matches
+        #     self.print_atributes()
+        #     self.load_data()
+            
+        # print(' ------------- Validation Completed with no errors ------------- ')
     
-class pdf_writer():
-    
-    def __init__(self):
-        
-        self.POINT = 1
-        self.INCH = 72
-        self.FONT_SIZE = 12
-        self.COL_START = [1 * self.INCH,
-                          3.0 * self.INCH,
-                          5.5 * self.INCH]
-        self.RECTANGLE_END = (8.5 - 1) * self.INCH
-        self.TEXT_HEIGHT = 14 * self.POINT
 
-        
-    def make_pdf_file(self, output_filename, text, chart_lines):
-        
-        c = canvas.Canvas(output_filename, pagesize=(8.5 * self.INCH, 11 * self.INCH))
-        c.setStrokeColorRGB(0,0,0)
-        c.setFillColorRGB(0,0,0)
-        c.setFont("Helvetica", self.FONT_SIZE * self.POINT)
-        v = 10 * self.INCH
-        for line_num, line in enumerate(text):
-            
-            # Hightlight alternating lines
-            if (line_num >= chart_lines[0] and
-                line_num <= chart_lines[1]):
-                
-                if (line_num - chart_lines[0]) % 2 == 0:
-                    c.setFillColorRGB(0.9, 0.9, 0.9) 
-                    c.rect(self.COL_START[0],
-                           v - 2 * self.POINT,
-                           self.RECTANGLE_END - self.COL_START[0],
-                           self.TEXT_HEIGHT,
-                           stroke=0,
-                           fill=1)
-            
-            # Write the text
-            c.setFillColorRGB(0, 0, 0)
-            for col_num, col in enumerate(line):
-                string = self.clean_string(col)
-                c.drawString(self.COL_START[col_num], v, string)
-                
-            # Find the height of the next line of text
-            v -= self.TEXT_HEIGHT
-            
-        # Create the file
-        c.showPage()
-        c.save()
-        
-    def clean_string(self, string):
-        
-        string = string.replace('[', '')
-        string = string.replace(']', '')
-        string = string.replace("'", '')
-        
-        return string
+
+
+
+
+
+    
+
     
 #     def __init__(self, matchmaker=None):
         

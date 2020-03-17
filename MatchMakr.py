@@ -8,7 +8,7 @@ from os import getcwd
 from os.path import join
 import yaml
 import shutil
-from match_maker import match_maker, input_checker_no_throw
+from match_maker import match_maker
 import threading
 from queue import Queue
 from time import sleep
@@ -92,15 +92,7 @@ class Makr2Maker():
         if self.match_maker.NUM_SIMILAR_FACULTY == 0:
             self.match_maker.USE_FACULTY_SIMILARITY = False
         else:
-            self.match_maker.USE_FACULTY_SIMILARITY = True
-        
-        # print('Checking settings before applying...')
-        # print('Errors (Empty if None)')
-        # print('----------------------------------------------------------------------------------------')
-        # input_checker_no_throw(self.match_maker)
-        # print('----------------------------------------------------------------------------------------')
-        # print('')
-            
+            self.match_maker.USE_FACULTY_SIMILARITY = True            
 
 class Dock(QListWidget):
     
@@ -443,7 +435,6 @@ class RunFrame(QFrame):
         self.dir_to_remove = join(working_dir, results_dir)
         
         def callback(button_pressed):
-            text = button_pressed.text()
             if button_pressed.text() == '&OK':
                 try:
                     shutil.rmtree(self.dir_to_remove)
@@ -609,6 +600,7 @@ class MatchMakr(QMainWindow):
     
     def thread_update_progress_bar(self):
         SLEEP_TIME = 0.1
+        was_running = False
         
         while True:
             if self.match_maker.is_running and not self.is_interrupting:
@@ -620,20 +612,12 @@ class MatchMakr(QMainWindow):
                 sleep(SLEEP_TIME)
                 self.statusBar.showMessage('Running...')
                 sleep(SLEEP_TIME)
-            elif self.is_interrupting:
-                self.statusBar.showMessage('Interrupting')
-                sleep(SLEEP_TIME)
-                self.statusBar.showMessage('Interrupting.')
-                sleep(SLEEP_TIME)
-                self.statusBar.showMessage('Interrupting..')
-                sleep(SLEEP_TIME)
-                self.statusBar.showMessage('Interrupting...')
-                sleep(SLEEP_TIME)
                 
+                was_running = True
                 
-                
-                               
-                
+            elif was_running:
+                was_running = False
+                self.statusBar.showMessage('Done')
         
     def close_application(self):
         pass
