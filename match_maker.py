@@ -12,7 +12,7 @@ import numpy as np
 import csv
 import warnings
 import multiprocessing
-import time
+# import time
 from ipdb import set_trace
 import threading
 
@@ -100,8 +100,6 @@ class ORSolver(cp_model.CpSolver):
     
     def Value(self, expression):
         return EvaluateLinearExpression(expression, self.__solution)
-        # set_trace()
-        # return super(ORSolver, self).Value(expression)
 
 class match_maker():
 
@@ -890,13 +888,21 @@ class match_maker():
         
         # Load the Google Forms data
         stud_match_data = []
-        with open(path.join(self.PATH, self.STUDENT_PREF), 'r') as csvfile:
+        file_name = path.join(self.PATH, self.STUDENT_PREF)
+        if not path.exists(file_name):
+            print('File does not exist: ' + file_name)
+            return
+        with open(file_name, 'r') as csvfile:
             reader = csv.reader(csvfile, delimiter=',')
             for row in reader:
                 stud_match_data.append(row)
 
         faculty_match_data = []
-        with open(path.join(self.PATH, self.FACULTY_PREF), 'r') as csvfile:
+        file_name = path.join(self.PATH, self.FACULTY_PREF)
+        if not path.exists(file_name):
+            print('File does not exist: ' + file_name)
+            return
+        with open(file_name, 'r') as csvfile:
             reader = csv.reader(csvfile, delimiter=',')
             for row in reader:
                 faculty_match_data.append(row)
@@ -1641,7 +1647,12 @@ class match_maker():
     def validate(self):
         
         # Check parameter validity
-        input_checker_no_throw(self)        
+        icnot = input_checker_no_throw(self)
+        if not icnot.can_continue:
+            print('ERRRORS FOUND!')
+            print('Check Output')
+            return
+        
         path_to_use = path.join(self.RESULTS_PATH, self.LOG_FILE_NAME)
         if not path.exists(path_to_use):
             print('Path does not exist: ' + path_to_use)
@@ -1652,6 +1663,8 @@ class match_maker():
             # Log the attributes used to make the matches
             self.print_atributes()
             self.load_data()
+            
+        print(' ------------- Validation Completed with no errors ------------- ')
     
 
 
@@ -1935,8 +1948,13 @@ class input_checker_no_throw(input_checker):
             self.main()
             self.can_continue = True
         except Exception as e:
+            print('Checking settings before applying...')
+            print('Errors (Empty if None)')
+            print('----------------------------------------------------------------------------------------')
             print(e)
-            self.can_continue = True
+            print('----------------------------------------------------------------------------------------')
+            print('')
+            self.can_continue = False
     
 class pdf_writer():
     
@@ -1994,77 +2012,6 @@ class pdf_writer():
         string = string.replace("'", '')
         
         return string
-    
-# class defaults():
-    
-#      def __init__(self):
-#         ''' Constants '''
-
-#         # Text
-#         self.PATH = "/media/veracrypt1/Users/Cale/Documents/Calers_Writing/PhD/GEC/scheduling_software/2020_data/processed_for_program"
-#         self.STUDENT_PREF = "CWRU_BME_Open_House-Student_Survey.csv"
-#         self.FACULTY_PREF = "CWRU_BME_Open_House-Faculty_Survey.csv"
-#         self.TIMES_NAME = "interview_times.csv"
-#         self.FACULTY_TRACK_FILE_NAME = 'faculty_tracks.csv'
-#         self.STUDENT_TRACK_FILE_NAME = 'student_tracks.csv'
-#         self.FACULTY_SIMILARITY_FILE_NAME = 'faculty_similarity.csv'
-#         self.IS_RECRUITING_FILE_NAME = 'faculty_is_recruiting.csv'
-#         self.LUNCH_FILE_NAME = 'faculty_work_lunch.csv'
-#         self.FACULTY_AVAILABILITY_NAME = 'faculty_availability.csv'
-#         self.STUDENT_AVAILABILITY_NAME = 'student_availability.csv'
-#         self.STUDENT_RANKING_FILE = 'student_ranking.csv'
-#         self.FACULTY_RANKING_FILE = 'faculty_ranking.csv'
-        
-#         # Checkbox
-#         self.USE_INTERVIEW_LIMITS = True
-#         self.USE_EXTRA_SLOTS = True  # Make reccomendations for matches not made
-#         self.USE_RANKING = True     # True if use preference order instead of binary
-#         self.USE_WORK_LUNCH = False
-#         self.USE_RECRUITING = True
-#         self.USE_STUDENT_AVAILABILITY = True
-#         self.USE_FACULTY_AVAILABILITY = True
-#         self.USE_TRACKS = True
-#         self.USE_FACULTY_SIMILARITY = True
-#         self.CHECK_MATCHES = True
-#         self.PRINT_STUD_PREFERENCE = True
-#         self.PRINT_FACULTY_PREFERENCE = True
-        
-#         # Integers
-#         self.NUM_INTERVIEWS = 9            # Range [0, Inf) suggested = 10
-#         self.MIN_INTERVIEWS = 3             # Range [0, self.MAX_INTERVIEWS]
-#         self.MAX_INTERVIEWS = self.NUM_INTERVIEWS            # Range [0, self.NUM_INTERVIEWS]
-#         self.NUM_SUGGESTIONS = 2
-#         self.FACULTY_ADVANTAGE = 70     # Range [0, Inf), suggested = 70
-#         self.MAX_RANKING = self.NUM_INTERVIEWS
-#         self.CHOICE_EXPONENT = 4
-#         self.LUNCH_PENALTY = 50000     # Range [0, Inf), suggested = 10
-#         self.LUNCH_PERIOD = 4       # Range [0, self.NUM_INTERVIEWS]
-#         self.RECRUITING_WEIGHT = 30000     # Range [0, Inf), suggested = 200
-#         self.AVAILABILITY_VALUE = -1
-#         self.TRACK_WEIGHT = 30000           # Range [0, Inf), suggested = 1
-#         self.FACULTY_SIMILARITY_WEIGHT = 30000  # Range [0, Inf), suggested = 2
-#         self.NUM_SIMILAR_FACULTY = 5
-#         self.NUM_PREFERENCES_2_CHECK = 5
-#         self.CHECK_FREQUENCY = 20
-#         self.MAX_SOLVER_TIME_SECONDS = 180   # range [0, inf), suggested = 190
-#         self.COLUMN_WIDTH = 25
-#         self.EMPTY_PENALTY = 0
-        
-# # https://stackoverflow.com/questions/2395431/using-tk.inter-in-python-to-edit-the-title-bar
-# class tk_title(tk.Frame):
-    
-#     def __init__(self,parent=None, title='NoTitle'):
-#         tk.Frame.__init__(self,parent)
-#         self.parent = parent
-#         self.make_widgets(title)
-        
-#     def make_widgets(self, title):
-#         # don't assume that self.parent is a root window.
-#         # instead, call `winfo_toplevel to get the root window
-#         self.winfo_toplevel().title(title)
-
-
-# class gui():
     
 #     def __init__(self, matchmaker=None):
         

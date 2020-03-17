@@ -16,6 +16,7 @@ from time import sleep
 '''
     TODO:
         Harden match_maker
+        Stop freezing on program close
         Stop Freezing of interrupt
         Add re_match_maker
         Create icon
@@ -93,8 +94,12 @@ class Makr2Maker():
         else:
             self.match_maker.USE_FACULTY_SIMILARITY = True
         
-        print('Checking settings before applying...')
-        input_checker_no_throw(self.match_maker)
+        # print('Checking settings before applying...')
+        # print('Errors (Empty if None)')
+        # print('----------------------------------------------------------------------------------------')
+        # input_checker_no_throw(self.match_maker)
+        # print('----------------------------------------------------------------------------------------')
+        # print('')
             
 
 class Dock(QListWidget):
