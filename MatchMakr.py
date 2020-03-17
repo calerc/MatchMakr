@@ -9,7 +9,7 @@ from os import getcwd
 from os.path import join
 import yaml
 import shutil
-from open_house_scheduling import match_maker
+from match_maker import match_maker
 from contextlib import redirect_stdout
 import io
 import time
