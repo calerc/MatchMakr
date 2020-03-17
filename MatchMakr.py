@@ -15,11 +15,12 @@ from time import sleep
 
 '''
     TODO:
-        Create icon
-        Dont let dock be closed
-        Add Status Bar
-        Print errors to screen
+        Harden match_maker
         Stop Freezing of interrupt
+        Add re_match_maker
+        Create icon
+        Clean up
+        Create Exectuable and Documentation
 '''
 class Makr2Maker():
 
@@ -134,7 +135,8 @@ class LineBox(QLineEdit):
                 
         if self.get_file:
             dir_name = QFileDialog.getExistingDirectory(self, 'Select Directory', self.text())
-            self.setText(dir_name)
+            if dir_name != '':
+                self.setText(dir_name)
       
 class SettingsFrame(QFrame):
     
@@ -482,9 +484,12 @@ class MatchMakr(QMainWindow):
         
         # Workflow
         self.items = QDockWidget("Workflow", self)
+        
         self.listWidget = Dock(self)
         self.items.setWidget(self.listWidget)
         self.items.setFloating(False)
+        self.items.setFeatures(QDockWidget.DockWidgetMovable)
+        # self.items.DockWidgetClosable = False
         self.addDockWidget(Qt.LeftDockWidgetArea, self.items)
         
         # Widget Stack
@@ -631,16 +636,6 @@ class MatchMakr(QMainWindow):
     def resizeEvent(self, event):
         self.run_frame.resize_text_output()
  
-class DataStream(QTextStream):
-
-    def __init__(self, device):
-        super(DataStream, self).__init__(device)
-    
-    def getvalue(self):
-        return self.readAll()
-    
-    def write(self, string):
-        self.writeQString(string)
 '''
     ----------------------------------------------------------------------------
 '''
@@ -673,14 +668,6 @@ class MyReceiver(QObject):
             text = self.queue.get()
             self.mysignal.emit(text)
 
-# An example QObject (to be run in a QThread) which outputs information with print
-# class LongRunningThing(QObject):
-#     @pyqtSlot()
-#     def run(self):
-#         for i in range(100):
-#             time.sleep(0.01)
-#             print(i)
-
 '''
     ----------------------------------------------------------------------------
 '''
@@ -706,5 +693,5 @@ if __name__ == '__main__':
     my_receiver.moveToThread(thread)
     thread.started.connect(my_receiver.run)
     thread.start()
-
+    
     sys.exit(app.exec_())
