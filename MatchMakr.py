@@ -13,6 +13,9 @@ import threading
 from queue import Queue
 from time import sleep
 
+global stop_threads
+stop_threads = False
+
 '''
     TODO:
         Harden match_maker
@@ -509,8 +512,8 @@ class MatchMakr(QMainWindow):
         self.is_running = False
         
         # Other GUI Setup
-        t = threading.Thread(target=self.thread_update_progress_bar)
-        t.start()
+        self.t = threading.Thread(target=self.thread_update_progress_bar)
+        self.t.start()
         self.setCentralWidget(self.stacked_widget)
         self.stacked_widget.setCurrentWidget(self.settings_frame)
         self.setWindowTitle("MatchMakr - Match Interviewers with Interviewees")
@@ -602,7 +605,9 @@ class MatchMakr(QMainWindow):
         SLEEP_TIME = 0.1
         was_running = False
         
-        while True:
+        global stop_threads
+        
+        while not stop_threads:
             if self.match_maker.is_running and not self.is_interrupting:
                 self.statusBar.showMessage('Running')
                 sleep(SLEEP_TIME)
@@ -619,11 +624,17 @@ class MatchMakr(QMainWindow):
                 was_running = False
                 self.statusBar.showMessage('Done')
         
-    def close_application(self):
-        pass
+    # def close_application(self):
+    #     pass
     
     def resizeEvent(self, event):
         self.run_frame.resize_text_output()
+        
+    def closeEvent(self, event):
+        global stop_threads
+        stop_threads = True
+        self.t.join()
+        event.accept()
  
 '''
     ----------------------------------------------------------------------------
@@ -672,8 +683,8 @@ if __name__ == '__main__':
     
     # Create Queue and redirect sys.stdout to this queue
     queue = Queue()
-    # sys.stdout = WriteStream(queue)
-    # sys.stderr = WriteStream(queue)
+    sys.stdout = WriteStream(queue)
+    sys.stderr = WriteStream(queue)
     
     # Create thread that will listen on the other end of the queue, and send the text to the textedit in our application
     thread = QThread()
