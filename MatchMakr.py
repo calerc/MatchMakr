@@ -512,8 +512,8 @@ class MatchMakr(QMainWindow):
         self.is_running = False
         
         # Other GUI Setup
-        self.t = threading.Thread(target=self.thread_update_progress_bar)
-        self.t.start()
+        self.update_status_thread = threading.Thread(target=self.thread_update_progress_bar)
+        self.update_status_thread.start()
         self.setCentralWidget(self.stacked_widget)
         self.stacked_widget.setCurrentWidget(self.settings_frame)
         self.setWindowTitle("MatchMakr - Match Interviewers with Interviewees")
@@ -623,17 +623,21 @@ class MatchMakr(QMainWindow):
             elif was_running:
                 was_running = False
                 self.statusBar.showMessage('Done')
-        
-    # def close_application(self):
-    #     pass
     
     def resizeEvent(self, event):
         self.run_frame.resize_text_output()
         
     def closeEvent(self, event):
+        
+        # Stop Matchmaking
+        self.run_frame.interrupt()
+        
+        # Stop other threads
         global stop_threads
         stop_threads = True
-        self.t.join()
+        self.update_status_thread.join()
+        
+        # Exit
         event.accept()
  
 '''
