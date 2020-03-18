@@ -1,0 +1,9 @@
+{cb_fac_avail: true, cb_print_fac_pref: true, cb_print_stud_pref: false, cb_stud_avail: false,
+  cb_use_rank: true, sb_check_freq: 100, sb_empty_penalty: 0, sb_exp: 4, sb_fac_advantage: 70,
+  sb_fac_sim_weight: 30000, sb_lunch_penalty: 50000, sb_lunch_period: 4, sb_max_num_inter: 9,
+  sb_min_num_inter: 3, sb_num_extra_matches: 2, sb_num_inter: 9, sb_num_pref_2_check: 5,
+  sb_num_sim_fac: 5, sb_recruit_weight: 30000, sb_track_weight: 30000, tb_fac_avail: faculty_availability.csv,
+  tb_fac_pref: faculty_preferences.csv, tb_fac_sched_dir: faculty_schedules, tb_log_name: log.txt,
+  tb_match: matches, tb_path: /media/veracrypt1/Users/Cale/Documents/Calers_Writing/PhD/GEC/scheduling_software,
+  tb_results_dir: results.csv, tb_stud_avail: student_availability.csv, tb_stud_pref: student_preferences.csv,
+  tb_stud_sched_dir: student_schedules}

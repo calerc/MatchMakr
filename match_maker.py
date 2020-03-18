@@ -1,23 +1,19 @@
 from __future__ import division
 from __future__ import print_function
-import tkinter as tk
-from tkinter import filedialog
 
 import sys
 from os import path, makedirs
 from ortools.sat import sat_parameters_pb2
 from ortools.sat.python import cp_model
-from reportlab.pdfgen import canvas
+from pdf_writer import PDFWriter
+from input_checker import InputCheckerNoThrow
+from my_or_tools import VarArrayAndObjectiveSolutionPrinter, ORSolver
 import numpy as np
 import csv
 import warnings
 import multiprocessing
-
 from ipdb import set_trace
-
-
-
-
+import threading
 
 
 '''
@@ -74,7 +70,9 @@ from ipdb import set_trace
     KNOWN BUGS:
         bin_needed = bin_needed[0][0] - IndexError: index 0 is out of bounds for axis 0 with size 0
             This doesn't affect fitting, but it won't allow for output
-'''      
+'''
+
+
 
 class match_maker():
 
@@ -100,10 +98,6 @@ class match_maker():
         self.MATCHES_TXT_NAME = 'matches.txt'
         self.STUDENT_SCHEDULES_DIR = 'student_schedules'
         self.FACULTY_SCHEDULES_DIR = 'faculty_schedules'
-        
-        # Make the necessary paths
-        if not path.isdir(self.RESULTS_PATH):
-            makedirs(self.RESULTS_PATH)
 
         # Number of interviews
         self.NUM_INTERVIEWS = 9            # Range [0, Inf) suggested = 10
@@ -209,13 +203,17 @@ class match_maker():
         # Set to zero to not use
         # Range [0, Inf), suggested = 0, suggested to turn on >
         # self.LUNCH_PENALTY ^ 2 (about 500 if using all default parameters)
-        self.EMPTY_PENALTY = 0
-
-        # Check parameter validity
-        input_checker(self)
+        self.EMPTY_PENALTY = 0        
         
-        # Printer
-        self.printer = None
+        # Interrupt
+        # def empty_func():
+        empty_func = lambda : 'No action taken'
+        self.stopSearch = empty_func
+        self.is_running = False
+        self.is_validating = False
+        
+        # Check parameter validity
+        # InputCheckerNoThrow(self)
         
         
 
@@ -670,7 +668,8 @@ class match_maker():
         self.is_recruiting = faculty_pref[1:, col]        
         self.is_recruiting[self.is_recruiting == ''] = 'No'
         
-        self.is_recruiting = self.response_to_weight(self.is_recruiting)
+        self.is_recruiting, error = self.response_to_weight(self.is_recruiting)
+        self.response_error_handler(error, 'RECRUITING')
         
     def load_lunch_data(self, faculty_pref):
         STEM = 'lunch'
@@ -680,7 +679,27 @@ class match_maker():
         self.will_work_lunch = faculty_pref[1:, col]        
         self.will_work_lunch[self.will_work_lunch == ''] = 'Yes'
         
-        self.will_work_lunch = self.response_to_weight(self.will_work_lunch)
+        self.will_work_lunch, error = self.response_to_weight(self.will_work_lunch)
+        
+        self.response_error_handler(error, 'LUNCH')
+                
+    def response_error_handler(self, error, name):
+        if not error:
+            return
+        
+        if self.is_validating:
+            print('For ' + name + ' data:')
+            print(error)
+            print('Valid Responses include only: ')
+            print('    yes')
+            print('    no')
+            print('    maybe')
+            print('    If it helps me interview students that are important to me')
+            print('    If it helps the department...')
+            print('')
+        else:
+            raise ValueError(error)
+        
         
     def find_single_column(self, faculty_pref, stem):
         
@@ -785,14 +804,26 @@ class match_maker():
             availability = self.load_data_from_human_readable(
                 filename).astype(int)
         except:
-            raise ValueError('Availability data at ' + filename + ' is invalid.  Check that all values are 1''s or 0''s')
+            print_text = 'Availability data at ' + filename + ' is invalid.  Check that all values are 1''s or 0''s'
+            if self.is_validating:
+                print(print_text)
+            else:
+                raise ValueError(print_text)
+                
 
         # Check that the number of availabilities is expected
         [_, num_available] = np.shape(availability)
         if num_available != num_expected_available:
-            set_trace()
-            raise ValueError(
-                'The availability data does not match the preference data')
+            error_message = 'The availability data does not match the preference data for file: ' + filename
+            if self.is_validating:
+                print(error_message)
+                print('There are two common causes of this issue: ')
+                print('    1) Different people are listed in availability and preference .csv files')
+                print('    2) Someone filled out the survey more than once (remove all but last entry)')
+                print('')
+                return None, None
+            else:
+                raise ValueError(error_message)
 
         available = np.asarray(
             np.where(
@@ -860,13 +891,21 @@ class match_maker():
         
         # Load the Google Forms data
         stud_match_data = []
-        with open(path.join(self.PATH, self.STUDENT_PREF), 'r') as csvfile:
+        file_name = path.join(self.PATH, self.STUDENT_PREF)
+        if not path.exists(file_name):
+            print('File does not exist: ' + file_name)
+            return
+        with open(file_name, 'r') as csvfile:
             reader = csv.reader(csvfile, delimiter=',')
             for row in reader:
                 stud_match_data.append(row)
 
         faculty_match_data = []
-        with open(path.join(self.PATH, self.FACULTY_PREF), 'r') as csvfile:
+        file_name = path.join(self.PATH, self.FACULTY_PREF)
+        if not path.exists(file_name):
+            print('File does not exist: ' + file_name)
+            return
+        with open(file_name, 'r') as csvfile:
             reader = csv.reader(csvfile, delimiter=',')
             for row in reader:
                 faculty_match_data.append(row)
@@ -876,9 +915,15 @@ class match_maker():
         faculty_match_data = np.asarray(faculty_match_data)
                 
         # Match the names nicely
+        if 'Full Name' not in faculty_match_data[0]:
+            print('Full Name Data Not Found for Faculty')
+            return
         faculty_col = np.where(faculty_match_data[0] == 'Full Name')[0][0]
         self.nice_faculty_names = np.copy(faculty_match_data[1:, faculty_col])
         
+        if 'Full Name' not in stud_match_data[0]:
+            print('Full Name Data Not Found for Students')
+            return
         student_col = np.where(stud_match_data[0] == 'Full Name')[0][0]
         self.nice_student_names = np.copy(stud_match_data[1:, student_col])
         
@@ -918,11 +963,13 @@ class match_maker():
                 self.STUDENT_AVAILABILITY_NAME, len(self.student_names))
             
         if self.USE_FACULTY_AVAILABILITY:
+            # set_trace()
             self.faculty_availability, self.faculty_avail = self.load_availability(
                 self.FACULTY_AVAILABILITY_NAME, len(self.faculty_names))          
 
         # Calculate the objective matrix
-        self.calc_objective_matrix()
+        if not self.is_validating:
+            self.calc_objective_matrix()
 
 
     '''
@@ -983,11 +1030,22 @@ class match_maker():
         faculty_col, student_col = self.get_pref_col(faculty_match_data, stud_match_data)         
         
         if len(faculty_col) == 0:
-            set_trace()
-            raise ValueError('Faculty preference data not found')
+            error_message = 'Faculty preference data not found'
+            if self.is_validating():
+                print(error_message)
+                print('Check that the data exists in the faculty preferences csv file')
+                return
+            else:
+                set_trace()
+                raise ValueError(error_message)
         if len(student_col) == 0:
-            set_trace()
-            raise ValueError('Student preference data not found')
+            error_message = 'Student preference data not found'
+            if self.is_validating():
+                print(error_message)
+                print('Check that the data exists in the faculty preferences csv file')                
+            else:
+                set_trace()
+                raise ValueError(error_message)
             
         student_pref = np.transpose(stud_match_data[1:, student_col.astype(int)])
         faculty_pref = np.transpose(faculty_match_data[1:, faculty_col.astype(int)])
@@ -1098,9 +1156,7 @@ class match_maker():
             
             try:
                 self.log_file.writelines(message + '\n')
-                if self.printer: self.printer(message)
             except:
-                if self.printer: self.printer('?????? List Message could not be printed ??????\n')
                 self.log_file.writelines('?????? List Message could not be printed ??????\n')
                 
         elif type(message) == list and type(message[0]) == str:
@@ -1110,10 +1166,8 @@ class match_maker():
             try:
                 for line in message:
                     self.log_file.writelines(line + '\n')
-                    if self.printer: self.printer(message)
             except:
                 self.log_file.writelines('?????? List Message could not be printed ??????\n')
-                if self.printer: self.printer('?????? List Message could not be printed ??????\n')
         else:
             
             print(message, sep=sep_char, flush=True)
@@ -1122,9 +1176,7 @@ class match_maker():
                     for cell in line:
                         self.log_file.writelines(cell.astype(str))
                         self.log_file.writelines(', ')
-                        if self.printer: self.printer(cell.astype(str))
                     self.log_file.writelines('\n')
-                    if self.printer: self.printer('\n')
             except:
                 try:
                     message = np.reshape(message, (-1, 1))
@@ -1132,9 +1184,7 @@ class match_maker():
                         for cell in line:
                             self.log_file.writelines(cell.astype(str))
                             self.log_file.writelines(', ')
-                            if self.printer: self.printer(cell.astype(str))
                         self.log_file.writelines('\n')
-                        if self.printer: self.printer('\n')
                 except:
                     self.log_file.writelines('?????? Array Message could not be printed ??????\n')
 
@@ -1162,19 +1212,35 @@ class match_maker():
     def main(self):
         
         # Check parameter validity
-        input_checker(self)        
+        self.is_running = True
+        icnot = InputCheckerNoThrow(self)
+        if not icnot.can_continue:
+            self.is_running = False
+            return       
+                
+        # Make the necessary paths
+        if not path.isdir(self.RESULTS_PATH):
+            makedirs(self.RESULTS_PATH)
         
-        with open(path.join(self.RESULTS_PATH, self.LOG_FILE_NAME), 'w') as self.log_file:
-
+        log_path = path.join(self.RESULTS_PATH, self.LOG_FILE_NAME)       
+        with open(log_path, 'w') as self.log_file:
+            
             # Log the attributes used to make the matches
             self.print_atributes()
+            
+            # Load data
+            self.load_data()
+            if self.is_validating:
+                self.is_running = False
+                return
+            
+            
             
             # Creates the model.
             model = cp_model.CpModel()
     
             # Get objective matrix
-            # self.define_random_matches()
-            self.load_data()
+            # self.define_random_matches()            
             self.calc_ranking()
             objective_matrix = self.objective_matrix
     
@@ -1279,9 +1345,10 @@ class match_maker():
                         for i in self.all_interviews))
     
             # Creates the solver and solve.
-            self.print('Building Model...')
-            solver = cp_model.CpSolver()
-            solution_printer = VarArrayAndObjectiveSolutionPrinter(self)
+            self.print('Building Model...') 
+            # solver = cp_model.CpSolver()
+            solver = ORSolver()
+            solution_printer = VarArrayAndObjectiveSolutionPrinter(self)           
     
             self.print('Setting up workers...')
             self.get_cpu_2_use()
@@ -1290,23 +1357,27 @@ class match_maker():
             solver.parameters.max_time_in_seconds = self.MAX_SOLVER_TIME_SECONDS
     
             self.print('Solving model...')
-            status = solver.SolveWithSolutionCallback(model, solution_printer)
-    
-            self.print(solver.StatusName(status))
+            t = threading.Thread(target=solver.SolveWithSolutionCallback, args=(model, solution_printer))
+            t.start()
+            self.stopSearch = solution_printer.StopSearch
+            
+            t.join()
+            status = solver.return_status()
+            self.print(status)
     
             # Collect results
-            if solver.StatusName(status) == 'FEASIBLE' or solver.StatusName(
-                    status) == 'OPTIMAL':
+            if status == 'FEASIBLE' or status == 'OPTIMAL':
                 results = np.empty(
                     (self.NUM_INTERVIEWS,
                      self.num_students,
                      self.num_faculty))
                 for i in self.all_interviews:
                     for p in self.all_faculty:
-                        for s in self.all_students:
+                        for s in self.all_students:                            
                             results[i][s][p] = solver.Value(
                                 self.interview[(p, s, i)])
-    
+                
+                    
                 # Save the results
                 self.results = results
                 self.solver = solver
@@ -1328,7 +1399,11 @@ class match_maker():
     
             else:
                 self.print('-------- Solver failed! --------')
-
+            
+            
+            self.print('-------- Matches Made! --------')
+            
+        self.is_running = True
     '''
         Convert the boolean matrix to a string matrix
     '''
@@ -1457,7 +1532,7 @@ class match_maker():
         moderate_threshold = ((0.25 * self.MAX_INTERVIEWS) ** self.CHOICE_EXPONENT) * 100
         
         # Initialize the PDF file
-        pw = pdf_writer()
+        pw = PDFWriter()
 
         # Print the results
         for count, name in enumerate(names1):
@@ -1584,6 +1659,7 @@ class match_maker():
     '''
 
     def response_to_weight(self, array):
+        error = None
         array = array.flatten()
 
         out_array = np.empty(np.shape(array))
@@ -1599,724 +1675,355 @@ class match_maker():
             elif response.lower() == 'ifithelpsthedepartment...':
                 out_array[count] = 0
             else:
-                raise ValueError('Response unknown')
+                error = 'Unknown Response: ' + response
+                # raise ResponseError('Response unknown:' + str(response))
 
-        return out_array
+        return out_array, error
+    
+    def set_printer(self, function_handle):
+        sys.stdout.write = function_handle
     
     def validate(self):
         
-        # Check parameter validity
-        input_checker(self)        
-        
-        with open(path.join(self.RESULTS_PATH, self.LOG_FILE_NAME), 'w') as self.log_file:
-
-            # Log the attributes used to make the matches
-            self.print_atributes()
-            self.load_data()
-
-
-'''
-    VarArrayAndObjectiveSolutionPrinter
-    callback printer object for ortools solver
-'''
-
-
-class VarArrayAndObjectiveSolutionPrinter(cp_model.CpSolverSolutionCallback):
-
-    ''' Print intermediate solutions. '''
-
-    def __init__(self, match_maker):
-
-        cp_model.CpSolverSolutionCallback.__init__(self)
-
-        self.match_maker = match_maker
-        self.variables = match_maker.interview
-
-        self.CHECK_MATCHES = self.match_maker.CHECK_MATCHES
-        self.CHECK_FREQUENCY = self.match_maker.CHECK_FREQUENCY
-
-        if self.CHECK_MATCHES:
-            self.last_stud_percent = np.zeros(
-                (1, self.match_maker.NUM_PREFERENCES_2_CHECK))
-            self.last_faculty_percent = np.zeros(
-                (1, self.match_maker.NUM_PREFERENCES_2_CHECK))
-
-        self.__solution_count = 0
-
-    def on_solution_callback(self):
-
-        # Get sizes
-        num_faculty = self.match_maker.num_faculty
-        num_students = self.match_maker.num_students
-        num_interviews = self.match_maker.NUM_INTERVIEWS
-
-        # Print objective value
-        text = 'Solution %i' % self.__solution_count
-        try:
-            self.match_maker.print(text)
-        except Exception as e:
-            print('Error!')
-            print(e)
-        text = '  objective value = %i' % self.ObjectiveValue()
-        try:
-            self.match_maker.print(text)
-        except Exception as e:
-            print('Error!')
-            print(e)
-
-        # Determine what matches were made
-        if self.CHECK_MATCHES and (
-                self.__solution_count %
-                self.CHECK_FREQUENCY == 0):
-
-            values = np.empty((num_students, num_faculty, num_interviews))
-            for p in range(num_faculty):
-                for s in range(num_students):
-                    for i in range(num_interviews):
-                        the_key = (p, s, i)
-                        the_variable = self.variables[the_key]
-                        values[s, p, i] = self.Value(the_variable)
-
-            values = np.asarray(values)
-
-            # Determine number of matches made for preferences
-            matches = np.sum(values, axis=2)
-            self.match_maker.check_preferences(matches)
-
-        self.__solution_count += 1
-
-    def solution_count(self):
-        return self.__solution_count
-
-
-'''
-    input_checker
-    Checks input to the match_maker class to make sure they are reasonable
-    Call input_checker(match_maker) as the last line of match_maker.__init__
-    If no errors result, the match_maker program can continue
-'''
-
-
-class input_checker:
-
-    def __init__(self, match_maker):
-        self.mm = match_maker
-
+        self.is_validating = True
+        print('Errors will appear here:')
+        print('-----------------------------------------------------------------')
         self.main()
-
-    def check_bool(self, parameter):
-        return isinstance(parameter, bool)
-
-    def check_file_exists(self, file_name):
-        if not isinstance(file_name, str):
-            return False
-
-        full_path = path.join(self.mm.PATH, file_name)
-        return path.isfile(full_path)
-
-    def check_positive_int(self, parameter):
-        if isinstance(parameter, int):
-            return parameter >= 0
-        return False
-
-    def check_range_int(self, parameter, lower_bound, upper_bound):
-        if isinstance(parameter, int):
-            return (parameter >= lower_bound and parameter <= upper_bound)
-        return False
-
-    def main(self):
-
-        # Check that files exist
-        file_names = [
-            self.mm.STUDENT_PREF,
-            self.mm.FACULTY_PREF,
-            self.mm.TIMES_NAME,
-            self.mm.FACULTY_AVAILABILITY_NAME,
-            self.mm.STUDENT_AVAILABILITY_NAME]
-
-        for file in file_names:
-            if not self.check_file_exists(file):
-                raise ValueError(file + ' is not on the path ' + self.mm.PATH)
-
-        # Check bools
-        if not self.check_bool(self.mm.USE_INTERVIEW_LIMITS):
-            raise ValueError('USE_INTERVIEW_LIMITS' + ' should be a bool')
-
-        if not self.check_bool(self.mm.USE_EXTRA_SLOTS):
-            raise ValueError('USE_EXTRA_SLOTS' + ' should be a bool')
-
-        if not self.check_bool(self.mm.USE_RANKING):
-            raise ValueError('USE_RANKING' + ' should be a bool')
-
-        if not self.check_bool(self.mm.USE_WORK_LUNCH):
-            raise ValueError('USE_WORK_LUNCH' + ' should be a bool')
-
-        if not self.check_bool(self.mm.USE_RECRUITING):
-            raise ValueError('USE_RECRUITING' + ' should be a bool')
-
-        if not self.check_bool(self.mm.USE_STUDENT_AVAILABILITY):
-            raise ValueError('USE_STUDENT_AVAILABILITY' + ' should be a bool')
+        print('-----------------------------------------------------------------')
+        self.is_validating = False
+        
+        # # Check parameter validity
+        # icnot = InputCheckerNoThrow(self)
+        # if not icnot.can_continue:
+        #     print('ERRRORS FOUND!')
+        #     print('Check Output')
+        #     return
+        
+        # path_to_use = path.join(self.RESULTS_PATH, self.LOG_FILE_NAME)
+        # if not path.exists(path_to_use):
+        #     print('Path does not exist: ' + path_to_use)
+        #     return
+        
+        # with open(path_to_use, 'w') as self.log_file:
+    
+        #     # Log the attributes used to make the matches
+        #     self.print_atributes()
+        #     self.load_data()
             
-        if not self.check_bool(self.mm.USE_FACULTY_AVAILABILITY):
-            raise ValueError('USE_FACULTY_AVAILABILITY' + ' should be a bool')
-
-        if not self.check_bool(self.mm.USE_FACULTY_SIMILARITY):
-            raise ValueError('USE_FACULTY_SIMILARITY' + ' should be a bool')
-
-        if not self.check_bool(self.mm.CHECK_MATCHES):
-            raise ValueError('CHECK_MATCHES' + ' should be a bool')
-
-        if not self.check_bool(self.mm.PRINT_STUD_PREFERENCE):
-            raise ValueError('PRINT_STUD_PREFERENCE' + ' should be a bool')
-            
-        if not self.check_bool(self.mm.PRINT_FACULTY_PREFERENCE):
-            raise ValueError('PRINT_FACULTY_PREFERENCE' + ' should be a bool')    
-        
-
-        # Check positive ints
-        if not self.check_positive_int(self.mm.NUM_INTERVIEWS):
-            raise ValueError(
-                'NUM_INTERVIEWS' +
-                ' should be a non-negative integer')
-
-        if not self.check_positive_int(self.mm.MIN_INTERVIEWS):
-            raise ValueError(
-                'MIN_INTERVIEWS' +
-                ' should be a non-negative integer')
-
-        if not self.check_positive_int(self.mm.MAX_INTERVIEWS):
-            raise ValueError(
-                'MAX_INTERVIEWS' +
-                ' should be a non-negative integer')
-
-        if not self.check_positive_int(self.mm.MAX_RANKING):
-            raise ValueError(
-                'MAX_RANKING' +
-                ' should be a non-negative integer')
-
-        if not self.check_positive_int(self.mm.CHOICE_EXPONENT):
-            raise ValueError(
-                'CHOICE_EXPONENT' +
-                ' should be a non-negative integer')
-
-        if not self.check_positive_int(self.mm.LUNCH_PENALTY):
-            raise ValueError(
-                'LUNCH_PENALTY' +
-                ' should be a non-negative integer')
-
-        if not self.check_positive_int(self.mm.RECRUITING_WEIGHT):
-            raise ValueError(
-                'RECRUITING_WEIGHT' +
-                ' should be a non-negative integer')
-
-        if not self.check_positive_int(self.mm.TRACK_WEIGHT):
-            raise ValueError(
-                'TRACK_WEIGHT' +
-                ' should be a non-negative integer')
-
-        if not self.check_positive_int(self.mm.FACULTY_SIMILARITY_WEIGHT):
-            raise ValueError(
-                'FACULTY_SIMILARITY_WEIGHT' +
-                ' should be a non-negative integer')
-
-        if not self.check_positive_int(self.mm.NUM_SUGGESTIONS):
-            raise ValueError(
-                'NUM_SUGGESTIONS' +
-                ' should be a non-negative integer')
-
-        if not self.check_positive_int(self.mm.CHECK_FREQUENCY):
-            raise ValueError(
-                'CHECK_FREQUENCY' +
-                ' should be a non-negative integer')
-
-        if not self.check_positive_int(self.mm.MAX_SOLVER_TIME_SECONDS):
-            raise ValueError(
-                'MAX_SOLVER_TIME_SECONDS' +
-                ' should be a non-negative integer')
-
-        if not self.check_positive_int(self.mm.RAND_NUM_STUDENTS):
-            raise ValueError(
-                'RAND_NUM_STUDENTS' +
-                ' should be a non-negative integer')
-
-        if not self.check_positive_int(self.mm.RAND_NUM_FACULTY):
-            raise ValueError(
-                'RAND_NUM_FACULTY' +
-                ' should be a non-negative integer')
-
-        if not self.check_positive_int(self.mm.RAND_NUM_INTERVIEWS):
-            raise ValueError(
-                'RAND_NUM_INTERVIEWS' +
-                ' should be a non-negative integer')
-
-        if not self.check_positive_int(self.mm.EMPTY_PENALTY):
-            raise ValueError(
-                'EMPTY_PENALTY' +
-                ' should be a non-negative integer')
-
-        # Check ranged ints
-        if not self.check_range_int(self.mm.FACULTY_ADVANTAGE, 0, 100):
-            raise ValueError(
-                'FACULTY_ADVANTAGE' +
-                ' should be an integer between ' +
-                '0' +
-                ' and ' +
-                '100')
-
-        if not self.check_range_int(
-                self.mm.LUNCH_PERIOD,
-                0,
-                self.mm.NUM_INTERVIEWS):
-            raise ValueError('LUNCH_PERIOD' + ' should be an integer between '
-                             + '0' + ' and ' + 'NUM_INTERVIEWS')
-
-        if not self.check_range_int(
-                self.mm.NUM_PREFERENCES_2_CHECK,
-                0,
-                self.mm.NUM_INTERVIEWS):
-            raise ValueError(
-                'NUM_PREFERENCES_2_CHECK' +
-                ' should be an integer between ' +
-                '0' +
-                ' and ' +
-                'NUM_INTERVIEWS')
-
-        # Check other parameters
-        if self.mm.AVAILABILITY_VALUE != -1 * 5000:
-            warnings.warn(
-                'We detected that AVAILABILITY_VALUE does not equal -1 * 5000.  This can cause issues.')
+        # print(' ------------- Validation Completed with no errors ------------- ')
     
-class pdf_writer():
-    
-    def __init__(self):
-        
-        self.POINT = 1
-        self.INCH = 72
-        self.FONT_SIZE = 12
-        self.COL_START = [1 * self.INCH,
-                          3.0 * self.INCH,
-                          5.5 * self.INCH]
-        self.RECTANGLE_END = (8.5 - 1) * self.INCH
-        self.TEXT_HEIGHT = 14 * self.POINT
-
-        
-    def make_pdf_file(self, output_filename, text, chart_lines):
-        
-        c = canvas.Canvas(output_filename, pagesize=(8.5 * self.INCH, 11 * self.INCH))
-        c.setStrokeColorRGB(0,0,0)
-        c.setFillColorRGB(0,0,0)
-        c.setFont("Helvetica", self.FONT_SIZE * self.POINT)
-        v = 10 * self.INCH
-        for line_num, line in enumerate(text):
-            
-            # Hightlight alternating lines
-            if (line_num >= chart_lines[0] and
-                line_num <= chart_lines[1]):
-                
-                if (line_num - chart_lines[0]) % 2 == 0:
-                    c.setFillColorRGB(0.9, 0.9, 0.9) 
-                    c.rect(self.COL_START[0],
-                           v - 2 * self.POINT,
-                           self.RECTANGLE_END - self.COL_START[0],
-                           self.TEXT_HEIGHT,
-                           stroke=0,
-                           fill=1)
-            
-            # Write the text
-            c.setFillColorRGB(0, 0, 0)
-            for col_num, col in enumerate(line):
-                string = self.clean_string(col)
-                c.drawString(self.COL_START[col_num], v, string)
-                
-            # Find the height of the next line of text
-            v -= self.TEXT_HEIGHT
-            
-        # Create the file
-        c.showPage()
-        c.save()
-        
-    def clean_string(self, string):
-        
-        string = string.replace('[', '')
-        string = string.replace(']', '')
-        string = string.replace("'", '')
-        
-        return string
-    
-class defaults():
-    
-     def __init__(self):
-        ''' Constants '''
-
-        # Text
-        self.PATH = "/media/veracrypt1/Users/Cale/Documents/Calers_Writing/PhD/GEC/scheduling_software/2020_data/processed_for_program"
-        self.STUDENT_PREF = "CWRU_BME_Open_House-Student_Survey.csv"
-        self.FACULTY_PREF = "CWRU_BME_Open_House-Faculty_Survey.csv"
-        self.TIMES_NAME = "interview_times.csv"
-        self.FACULTY_TRACK_FILE_NAME = 'faculty_tracks.csv'
-        self.STUDENT_TRACK_FILE_NAME = 'student_tracks.csv'
-        self.FACULTY_SIMILARITY_FILE_NAME = 'faculty_similarity.csv'
-        self.IS_RECRUITING_FILE_NAME = 'faculty_is_recruiting.csv'
-        self.LUNCH_FILE_NAME = 'faculty_work_lunch.csv'
-        self.FACULTY_AVAILABILITY_NAME = 'faculty_availability.csv'
-        self.STUDENT_AVAILABILITY_NAME = 'student_availability.csv'
-        self.STUDENT_RANKING_FILE = 'student_ranking.csv'
-        self.FACULTY_RANKING_FILE = 'faculty_ranking.csv'
-        
-        # Checkbox
-        self.USE_INTERVIEW_LIMITS = True
-        self.USE_EXTRA_SLOTS = True  # Make reccomendations for matches not made
-        self.USE_RANKING = True     # True if use preference order instead of binary
-        self.USE_WORK_LUNCH = False
-        self.USE_RECRUITING = True
-        self.USE_STUDENT_AVAILABILITY = True
-        self.USE_FACULTY_AVAILABILITY = True
-        self.USE_TRACKS = True
-        self.USE_FACULTY_SIMILARITY = True
-        self.CHECK_MATCHES = True
-        self.PRINT_STUD_PREFERENCE = True
-        self.PRINT_FACULTY_PREFERENCE = True
-        
-        # Integers
-        self.NUM_INTERVIEWS = 9            # Range [0, Inf) suggested = 10
-        self.MIN_INTERVIEWS = 3             # Range [0, self.MAX_INTERVIEWS]
-        self.MAX_INTERVIEWS = self.NUM_INTERVIEWS            # Range [0, self.NUM_INTERVIEWS]
-        self.NUM_SUGGESTIONS = 2
-        self.FACULTY_ADVANTAGE = 70     # Range [0, Inf), suggested = 70
-        self.MAX_RANKING = self.NUM_INTERVIEWS
-        self.CHOICE_EXPONENT = 4
-        self.LUNCH_PENALTY = 50000     # Range [0, Inf), suggested = 10
-        self.LUNCH_PERIOD = 4       # Range [0, self.NUM_INTERVIEWS]
-        self.RECRUITING_WEIGHT = 30000     # Range [0, Inf), suggested = 200
-        self.AVAILABILITY_VALUE = -1
-        self.TRACK_WEIGHT = 30000           # Range [0, Inf), suggested = 1
-        self.FACULTY_SIMILARITY_WEIGHT = 30000  # Range [0, Inf), suggested = 2
-        self.NUM_SIMILAR_FACULTY = 5
-        self.NUM_PREFERENCES_2_CHECK = 5
-        self.CHECK_FREQUENCY = 20
-        self.MAX_SOLVER_TIME_SECONDS = 180   # range [0, inf), suggested = 190
-        self.COLUMN_WIDTH = 25
-        self.EMPTY_PENALTY = 0
-        
-# https://stackoverflow.com/questions/2395431/using-tk.inter-in-python-to-edit-the-title-bar
-class tk_title(tk.Frame):
-    
-    def __init__(self,parent=None, title='NoTitle'):
-        tk.Frame.__init__(self,parent)
-        self.parent = parent
-        self.make_widgets(title)
-        
-    def make_widgets(self, title):
-        # don't assume that self.parent is a root window.
-        # instead, call `winfo_toplevel to get the root window
-        self.winfo_toplevel().title(title)
 
 
-class gui():
-    
-    def __init__(self, matchmaker=None):
-        
-        # Matchmaker
-        if matchmaker != None:
-            self.mm = matchmaker
-        else:
-            self.mm = 'None'
-        
-        # Defaults
-        d = defaults()       
-        self.d = d
-        
-        # Set up master
-        self.master = tk.Tk()
-        tk_title(self.master, 'MatchMakr') 
-        
-        # Define checkbox variables
-        self.var_min_max = tk.BooleanVar(value=d.USE_INTERVIEW_LIMITS)
-        self.var_suggestions = tk.BooleanVar(value=d.USE_EXTRA_SLOTS)
-        self.var_check_preferences =tk.BooleanVar(value=d.CHECK_MATCHES)
-        self.var_stud_match_qualtiy = tk.BooleanVar(value=d.PRINT_STUD_PREFERENCE)
-        self.var_faculty_match_quality = tk.BooleanVar(value=d.PRINT_FACULTY_PREFERENCE)
-        self.var_ranked_pref = tk.BooleanVar(value=d.USE_RANKING)
-        self.var_stud_avail = tk.BooleanVar(value=d.USE_STUDENT_AVAILABILITY)
-        self.var_faculty_avail = tk.BooleanVar(value=d.USE_INTERVIEW_LIMITS)
-        
-        # tk.Checkbuttons
-        check_button_column = 3
-        tk.Checkbutton(self.master, text="Use min/max interview number",
-                    variable=self.var_min_max).grid(row=7, column=check_button_column, sticky=tk.W)
-        tk.Checkbutton(self.master, text="Print suggestions for additional interviews",
-                    variable=self.var_suggestions).grid(row=21, column=check_button_column, sticky=tk.W)
-        tk.Checkbutton(self.master, text="Check if preferences are met (slower)",
-                    variable=self.var_check_preferences).grid(row=20, column=check_button_column, sticky=tk.W)   
-        tk.Checkbutton(self.master, text="Print match quality for students",
-                    variable=self.var_stud_match_qualtiy).grid(row=23, column=check_button_column, sticky=tk.W)
-        tk.Checkbutton(self.master, text="Print match quality for faculty",
-                    variable=self.var_faculty_match_quality).grid(row=24, column=check_button_column, sticky=tk.W)
-        tk.Checkbutton(self.master, text="Use ranked preferences",
-                    variable=self.var_ranked_pref).grid(row=9, column=check_button_column, sticky=tk.W)
-        tk.Checkbutton(self.master, text="Use student availability",
-                    variable=self.var_stud_avail).grid(row=5, column=check_button_column, sticky=tk.W)
-        tk.Checkbutton(self.master, text="Use faculty availability",
-                    variable=self.var_faculty_avail).grid(row=4, column=check_button_column, sticky=tk.W)
-        
-        # String variables
-        self.path = tk.StringVar(value=d.PATH)
-        self.stud_pref = tk.StringVar(value=d.STUDENT_PREF)
-        self.faculty_pref = tk.StringVar(value=d.FACULTY_PREF)
-        self.interview_times = tk.StringVar(value=d.TIMES_NAME)
-        self.faculty_avail = tk.StringVar(value=d.FACULTY_AVAILABILITY_NAME)
-        self.stud_avail = tk.StringVar(value=d.STUDENT_AVAILABILITY_NAME)
-        
-        # String boxes
-        label_column = 0
-        tk.Entry_column = 1
-        tk.Label(self.master,
-                    text='File path:').grid(row=0, column=label_column, sticky=tk.E)
-        tk.Entry(self.master,
-                    textvariable=self.path).grid(row=0, column=tk.Entry_column, sticky=tk.W)
-        
-        tk.Label(self.master,
-                    text='Student preference file name:').grid(row=1, column=label_column, sticky=tk.E)
-        tk.Entry(self.master,
-                    textvariable=self.stud_pref).grid(row=1, column=tk.Entry_column, sticky=tk.W)
-        
-        tk.Label(self.master,
-                    text='Faculty preference file name:').grid(row=2, column=label_column, sticky=tk.E)
-        tk.Entry(self.master,
-                    textvariable=self.faculty_pref).grid(row=2, column=tk.Entry_column, sticky=tk.W)
-        
-        tk.Label(self.master,
-                    text='Interview times file name:').grid(row=3, column=label_column, sticky=tk.E)
-        tk.Entry(self.master,
-                    textvariable=self.interview_times).grid(row=3, column=tk.Entry_column, sticky=tk.W)
-        
-        tk.Label(self.master,
-                    text='Faculty availability file name:').grid(row=4, column=label_column, sticky=tk.E)
-        tk.Entry(self.master,
-                    textvariable=self.faculty_avail).grid(row=4, column=tk.Entry_column, sticky=tk.W)
-        
-        tk.Label(self.master,
-                    text='Student availability file name:').grid(row=5, column=label_column, sticky=tk.E)
-        tk.Entry(self.master,
-                    textvariable=self.stud_avail).grid(row=5, column=tk.Entry_column, sticky=tk.W)
-        
-        # tk.Entry variables
-        self.num_interviews = tk.IntVar(value=d.NUM_INTERVIEWS)
-        self.min_interviews = tk.IntVar(value=d.MIN_INTERVIEWS)
-        self.max_interviews = tk.IntVar(value=d.MAX_INTERVIEWS)
-        self.faculty_advantage = tk.IntVar(value=d.FACULTY_ADVANTAGE)
-        self.max_ranking = tk.IntVar(value=d.MAX_RANKING)
-        self.choice_exponent = tk.IntVar(value=d.CHOICE_EXPONENT)
-        self.lunch_penalty = tk.IntVar(value=d.LUNCH_PENALTY)
-        
-        self.lunch_period = tk.IntVar(value=d.LUNCH_PERIOD)
-        self.recruiting_weight = tk.IntVar(value=d.RECRUITING_WEIGHT)
-        self.track_weight = tk.IntVar(value=d.TRACK_WEIGHT)
-        self.faculty_sim_weight = tk.IntVar(value=d.FACULTY_SIMILARITY_WEIGHT)
-        self.num_similar_faculty = tk.IntVar(value=d.NUM_SIMILAR_FACULTY)
-        self.num_pref_2_check = tk.IntVar(value=d.NUM_PREFERENCES_2_CHECK)
-        self.num_suggestions = tk.IntVar(value=d.NUM_SUGGESTIONS)
-        self.check_frequency = tk.IntVar(value=d.CHECK_FREQUENCY)
-        self.max_solver_time_seconds = tk.IntVar(value=d.MAX_SOLVER_TIME_SECONDS)
-        self.empty_penalty = tk.IntVar(value=d.EMPTY_PENALTY)
-        
-        
-        # tk.Entry boxes
-        tk.Label(self.master,
-                    text='Number of interview slots (int > 0):').grid(row=6, column=label_column, sticky=tk.E)
-        tk.Entry(self.master,
-                    textvariable=self.num_interviews).grid(row=6, column=tk.Entry_column, sticky=tk.W)
-        
-        tk.Label(self.master,
-                    text='Minimum number of interviews (int > 0):').grid(row=7, column=label_column, sticky=tk.E)
-        tk.Entry(self.master,
-                    textvariable=self.min_interviews).grid(row=7, column=tk.Entry_column, sticky=tk.W)
-        
-        tk.Label(self.master,
-                    text='Maximum number of interviews (int >= 0):').grid(row=8, column=label_column, sticky=tk.E)
-        tk.Entry(self.master,
-                    textvariable=self.max_interviews).grid(row=8, column=tk.Entry_column, sticky=tk.W)
-        
-        tk.Label(self.master,
-                    text='Maximum objective value (int > 0):').grid(row=9, column=label_column, sticky=tk.E)
-        tk.Entry(self.master,
-                    textvariable=self.max_ranking).grid(row=9, column=tk.Entry_column, sticky=tk.W)
-        
-        tk.Label(self.master,
-                    text='Faculty preference weight (ints [0, 100]):').grid(row=10, column=label_column, sticky=tk.E)
-        tk.Entry(self.master,
-                    textvariable=self.faculty_advantage).grid(row=10, column=tk.Entry_column, sticky=tk.W)
-        
-        tk.Label(self.master,
-                    text='Objective function exponent (int > 0):').grid(row=11, column=label_column, sticky=tk.E)
-        tk.Entry(self.master,
-                    textvariable=self.choice_exponent).grid(row=11, column=tk.Entry_column, sticky=tk.W)
-        
-        tk.Label(self.master,
-                    text='Lunch penalty (int > 0):').grid(row=12, column=label_column, sticky=tk.E)
-        tk.Entry(self.master,
-                    textvariable=self.lunch_penalty).grid(row=12, column=tk.Entry_column, sticky=tk.W)
-        
-        tk.Label(self.master,
-                    text='Faculty similarity advantage (int > 0):').grid(row=13, column=label_column, sticky=tk.E)
-        tk.Entry(self.master,
-                    textvariable=self.faculty_sim_weight).grid(row=13, column=1, sticky=tk.W)
-        
-        tk.Label(self.master,
-                    text='Track advantage (int > 0):').grid(row=14, column=label_column, sticky=tk.E)
-        tk.Entry(self.master,
-                    textvariable=self.track_weight).grid(row=14, column=1, sticky=tk.W)
-        
-        tk.Label(self.master,
-                    text='Recruiting faculty advantage (int > 0):').grid(row=15, column=label_column, sticky=tk.E)
-        tk.Entry(self.master,
-                    textvariable=self.recruiting_weight).grid(row=15, column=tk.Entry_column, sticky=tk.W)
-        
-        tk.Label(self.master,
-                    text='Penalty for empty interview slots \n(int > 0, AVOID USING):').grid(row=16, column=label_column, sticky=tk.E)
-        tk.Entry(self.master,
-                    textvariable=self.empty_penalty).grid(row=16, column=tk.Entry_column, sticky=tk.W)
-        
-        
-        
-        tk.Label(self.master,
-                    text='Interview period containing lunch (int > 0):').grid(row=17, column=label_column, sticky=tk.E)
-        tk.Entry(self.master,
-                    textvariable=self.lunch_period).grid(row=17, column=tk.Entry_column, sticky=tk.W)     
 
-        tk.Label(self.master,
-                    text='Number of similar faculty to match (int > 0):').grid(row=18, column=label_column, sticky=tk.E)
-        tk.Entry(self.master,
-                    textvariable=self.num_similar_faculty).grid(row=18, column=1, sticky=tk.W)
+
+
+
+    
+
+    
+#     def __init__(self, matchmaker=None):
         
-        tk.Label(self.master,
-                    text='Number of interviews to suggest (int > 0):').grid(row=19, column=label_column, sticky=tk.E)
-        tk.Entry(self.master,
-                    textvariable=self.num_suggestions).grid(row=19, column=1, sticky=tk.W)
+#         # Matchmaker
+#         if matchmaker != None:
+#             self.mm = matchmaker
+#         else:
+#             self.mm = 'None'
+        
+#         # Defaults
+#         d = defaults()       
+#         self.d = d
+        
+#         # Set up master
+#         self.master = tk.Tk()
+#         tk_title(self.master, 'MatchMakr') 
+        
+#         # Define checkbox variables
+#         self.var_min_max = tk.BooleanVar(value=d.USE_INTERVIEW_LIMITS)
+#         self.var_suggestions = tk.BooleanVar(value=d.USE_EXTRA_SLOTS)
+#         self.var_check_preferences =tk.BooleanVar(value=d.CHECK_MATCHES)
+#         self.var_stud_match_qualtiy = tk.BooleanVar(value=d.PRINT_STUD_PREFERENCE)
+#         self.var_faculty_match_quality = tk.BooleanVar(value=d.PRINT_FACULTY_PREFERENCE)
+#         self.var_ranked_pref = tk.BooleanVar(value=d.USE_RANKING)
+#         self.var_stud_avail = tk.BooleanVar(value=d.USE_STUDENT_AVAILABILITY)
+#         self.var_faculty_avail = tk.BooleanVar(value=d.USE_INTERVIEW_LIMITS)
+        
+#         # tk.Checkbuttons
+#         check_button_column = 3
+#         tk.Checkbutton(self.master, text="Use min/max interview number",
+#                     variable=self.var_min_max).grid(row=7, column=check_button_column, sticky=tk.W)
+#         tk.Checkbutton(self.master, text="Print suggestions for additional interviews",
+#                     variable=self.var_suggestions).grid(row=21, column=check_button_column, sticky=tk.W)
+#         tk.Checkbutton(self.master, text="Check if preferences are met (slower)",
+#                     variable=self.var_check_preferences).grid(row=20, column=check_button_column, sticky=tk.W)   
+#         tk.Checkbutton(self.master, text="Print match quality for students",
+#                     variable=self.var_stud_match_qualtiy).grid(row=23, column=check_button_column, sticky=tk.W)
+#         tk.Checkbutton(self.master, text="Print match quality for faculty",
+#                     variable=self.var_faculty_match_quality).grid(row=24, column=check_button_column, sticky=tk.W)
+#         tk.Checkbutton(self.master, text="Use ranked preferences",
+#                     variable=self.var_ranked_pref).grid(row=9, column=check_button_column, sticky=tk.W)
+#         tk.Checkbutton(self.master, text="Use student availability",
+#                     variable=self.var_stud_avail).grid(row=5, column=check_button_column, sticky=tk.W)
+#         tk.Checkbutton(self.master, text="Use faculty availability",
+#                     variable=self.var_faculty_avail).grid(row=4, column=check_button_column, sticky=tk.W)
+        
+#         # String variables
+#         self.path = tk.StringVar(value=d.PATH)
+#         self.stud_pref = tk.StringVar(value=d.STUDENT_PREF)
+#         self.faculty_pref = tk.StringVar(value=d.FACULTY_PREF)
+#         self.interview_times = tk.StringVar(value=d.TIMES_NAME)
+#         self.faculty_avail = tk.StringVar(value=d.FACULTY_AVAILABILITY_NAME)
+#         self.stud_avail = tk.StringVar(value=d.STUDENT_AVAILABILITY_NAME)
+        
+#         # String boxes
+#         label_column = 0
+#         tk.Entry_column = 1
+#         tk.Label(self.master,
+#                     text='File path:').grid(row=0, column=label_column, sticky=tk.E)
+#         tk.Entry(self.master,
+#                     textvariable=self.path).grid(row=0, column=tk.Entry_column, sticky=tk.W)
+        
+#         tk.Label(self.master,
+#                     text='Student preference file name:').grid(row=1, column=label_column, sticky=tk.E)
+#         tk.Entry(self.master,
+#                     textvariable=self.stud_pref).grid(row=1, column=tk.Entry_column, sticky=tk.W)
+        
+#         tk.Label(self.master,
+#                     text='Faculty preference file name:').grid(row=2, column=label_column, sticky=tk.E)
+#         tk.Entry(self.master,
+#                     textvariable=self.faculty_pref).grid(row=2, column=tk.Entry_column, sticky=tk.W)
+        
+#         tk.Label(self.master,
+#                     text='Interview times file name:').grid(row=3, column=label_column, sticky=tk.E)
+#         tk.Entry(self.master,
+#                     textvariable=self.interview_times).grid(row=3, column=tk.Entry_column, sticky=tk.W)
+        
+#         tk.Label(self.master,
+#                     text='Faculty availability file name:').grid(row=4, column=label_column, sticky=tk.E)
+#         tk.Entry(self.master,
+#                     textvariable=self.faculty_avail).grid(row=4, column=tk.Entry_column, sticky=tk.W)
+        
+#         tk.Label(self.master,
+#                     text='Student availability file name:').grid(row=5, column=label_column, sticky=tk.E)
+#         tk.Entry(self.master,
+#                     textvariable=self.stud_avail).grid(row=5, column=tk.Entry_column, sticky=tk.W)
+        
+#         # tk.Entry variables
+#         self.num_interviews = tk.IntVar(value=d.NUM_INTERVIEWS)
+#         self.min_interviews = tk.IntVar(value=d.MIN_INTERVIEWS)
+#         self.max_interviews = tk.IntVar(value=d.MAX_INTERVIEWS)
+#         self.faculty_advantage = tk.IntVar(value=d.FACULTY_ADVANTAGE)
+#         self.max_ranking = tk.IntVar(value=d.MAX_RANKING)
+#         self.choice_exponent = tk.IntVar(value=d.CHOICE_EXPONENT)
+#         self.lunch_penalty = tk.IntVar(value=d.LUNCH_PENALTY)
+        
+#         self.lunch_period = tk.IntVar(value=d.LUNCH_PERIOD)
+#         self.recruiting_weight = tk.IntVar(value=d.RECRUITING_WEIGHT)
+#         self.track_weight = tk.IntVar(value=d.TRACK_WEIGHT)
+#         self.faculty_sim_weight = tk.IntVar(value=d.FACULTY_SIMILARITY_WEIGHT)
+#         self.num_similar_faculty = tk.IntVar(value=d.NUM_SIMILAR_FACULTY)
+#         self.num_pref_2_check = tk.IntVar(value=d.NUM_PREFERENCES_2_CHECK)
+#         self.num_suggestions = tk.IntVar(value=d.NUM_SUGGESTIONS)
+#         self.check_frequency = tk.IntVar(value=d.CHECK_FREQUENCY)
+#         self.max_solver_time_seconds = tk.IntVar(value=d.MAX_SOLVER_TIME_SECONDS)
+#         self.empty_penalty = tk.IntVar(value=d.EMPTY_PENALTY)
+        
+        
+#         # tk.Entry boxes
+#         tk.Label(self.master,
+#                     text='Number of interview slots (int > 0):').grid(row=6, column=label_column, sticky=tk.E)
+#         tk.Entry(self.master,
+#                     textvariable=self.num_interviews).grid(row=6, column=tk.Entry_column, sticky=tk.W)
+        
+#         tk.Label(self.master,
+#                     text='Minimum number of interviews (int > 0):').grid(row=7, column=label_column, sticky=tk.E)
+#         tk.Entry(self.master,
+#                     textvariable=self.min_interviews).grid(row=7, column=tk.Entry_column, sticky=tk.W)
+        
+#         tk.Label(self.master,
+#                     text='Maximum number of interviews (int >= 0):').grid(row=8, column=label_column, sticky=tk.E)
+#         tk.Entry(self.master,
+#                     textvariable=self.max_interviews).grid(row=8, column=tk.Entry_column, sticky=tk.W)
+        
+#         tk.Label(self.master,
+#                     text='Maximum objective value (int > 0):').grid(row=9, column=label_column, sticky=tk.E)
+#         tk.Entry(self.master,
+#                     textvariable=self.max_ranking).grid(row=9, column=tk.Entry_column, sticky=tk.W)
+        
+#         tk.Label(self.master,
+#                     text='Faculty preference weight (ints [0, 100]):').grid(row=10, column=label_column, sticky=tk.E)
+#         tk.Entry(self.master,
+#                     textvariable=self.faculty_advantage).grid(row=10, column=tk.Entry_column, sticky=tk.W)
+        
+#         tk.Label(self.master,
+#                     text='Objective function exponent (int > 0):').grid(row=11, column=label_column, sticky=tk.E)
+#         tk.Entry(self.master,
+#                     textvariable=self.choice_exponent).grid(row=11, column=tk.Entry_column, sticky=tk.W)
+        
+#         tk.Label(self.master,
+#                     text='Lunch penalty (int > 0):').grid(row=12, column=label_column, sticky=tk.E)
+#         tk.Entry(self.master,
+#                     textvariable=self.lunch_penalty).grid(row=12, column=tk.Entry_column, sticky=tk.W)
+        
+#         tk.Label(self.master,
+#                     text='Faculty similarity advantage (int > 0):').grid(row=13, column=label_column, sticky=tk.E)
+#         tk.Entry(self.master,
+#                     textvariable=self.faculty_sim_weight).grid(row=13, column=1, sticky=tk.W)
+        
+#         tk.Label(self.master,
+#                     text='Track advantage (int > 0):').grid(row=14, column=label_column, sticky=tk.E)
+#         tk.Entry(self.master,
+#                     textvariable=self.track_weight).grid(row=14, column=1, sticky=tk.W)
+        
+#         tk.Label(self.master,
+#                     text='Recruiting faculty advantage (int > 0):').grid(row=15, column=label_column, sticky=tk.E)
+#         tk.Entry(self.master,
+#                     textvariable=self.recruiting_weight).grid(row=15, column=tk.Entry_column, sticky=tk.W)
+        
+#         tk.Label(self.master,
+#                     text='Penalty for empty interview slots \n(int > 0, AVOID USING):').grid(row=16, column=label_column, sticky=tk.E)
+#         tk.Entry(self.master,
+#                     textvariable=self.empty_penalty).grid(row=16, column=tk.Entry_column, sticky=tk.W)
+        
+        
+        
+#         tk.Label(self.master,
+#                     text='Interview period containing lunch (int > 0):').grid(row=17, column=label_column, sticky=tk.E)
+#         tk.Entry(self.master,
+#                     textvariable=self.lunch_period).grid(row=17, column=tk.Entry_column, sticky=tk.W)     
+
+#         tk.Label(self.master,
+#                     text='Number of similar faculty to match (int > 0):').grid(row=18, column=label_column, sticky=tk.E)
+#         tk.Entry(self.master,
+#                     textvariable=self.num_similar_faculty).grid(row=18, column=1, sticky=tk.W)
+        
+#         tk.Label(self.master,
+#                     text='Number of interviews to suggest (int > 0):').grid(row=19, column=label_column, sticky=tk.E)
+#         tk.Entry(self.master,
+#                     textvariable=self.num_suggestions).grid(row=19, column=1, sticky=tk.W)
           
          
-        tk.Label(self.master,
-                    text='Maximum solver time in seconds (int > 0):').grid(row=20, column=label_column, sticky=tk.E)
-        tk.Entry(self.master,
-                    textvariable=self.max_solver_time_seconds).grid(row=20, column=tk.Entry_column, sticky=tk.W)
+#         tk.Label(self.master,
+#                     text='Maximum solver time in seconds (int > 0):').grid(row=20, column=label_column, sticky=tk.E)
+#         tk.Entry(self.master,
+#                     textvariable=self.max_solver_time_seconds).grid(row=20, column=tk.Entry_column, sticky=tk.W)
                 
-        tk.Label(self.master,
-                    text='Number of preferences to check \n during matching (int > 0):').grid(row=21, column=label_column, sticky=tk.E)
-        tk.Entry(self.master,
-                    textvariable=self.num_pref_2_check).grid(row=21, column=1, sticky=tk.W)
+#         tk.Label(self.master,
+#                     text='Number of preferences to check \n during matching (int > 0):').grid(row=21, column=label_column, sticky=tk.E)
+#         tk.Entry(self.master,
+#                     textvariable=self.num_pref_2_check).grid(row=21, column=1, sticky=tk.W)
                 
-        tk.Label(self.master,
-                    text='Number of iterations to run before checking\nprogress  (int > 0, big = slow):').grid(row=22, column=label_column, sticky=tk.E)
-        tk.Entry(self.master,
-                    textvariable=self.check_frequency).grid(row=22, column=1, sticky=tk.W)
+#         tk.Label(self.master,
+#                     text='Number of iterations to run before checking\nprogress  (int > 0, big = slow):').grid(row=22, column=label_column, sticky=tk.E)
+#         tk.Entry(self.master,
+#                     textvariable=self.check_frequency).grid(row=22, column=1, sticky=tk.W)
         
-        # Buttons
-        tk.button_column = 4
-#        tk.Button(self.master, text='Test', command=self.test).grid(row=21, column = tk.button_column)
-        tk.Button(self.master, text='Save Defaults', command=self.save_defaults).grid(row=22, column = tk.button_column)
-        tk.Button(self.master, text='Load Defaults', command=self.load_defaults).grid(row=23, column = tk.button_column)
-        tk.Button(self.master, text='Run', command=self.start_matchmaking).grid(row=24, column = tk.button_column)
+#         # Buttons
+#         tk.button_column = 4
+# #        tk.Button(self.master, text='Test', command=self.test).grid(row=21, column = tk.button_column)
+#         tk.Button(self.master, text='Save Defaults', command=self.save_defaults).grid(row=22, column = tk.button_column)
+#         tk.Button(self.master, text='Load Defaults', command=self.load_defaults).grid(row=23, column = tk.button_column)
+#         tk.Button(self.master, text='Run', command=self.start_matchmaking).grid(row=24, column = tk.button_column)
         
-        # Mainloop
-        self.master.mainloop()
+#         # Mainloop
+#         self.master.mainloop()
         
-#    def test(self):
-#        print(self.min_interviews.get())
+# #    def test(self):
+# #        print(self.min_interviews.get())
 
     
-    def assign_parameters(self):
+#     def assign_parameters(self):
         
-        ''' String Constants '''
-        self.mm.PATH = self.path.get()
-        self.mm.STUDENT_PREF = self.stud_pref.get()
-        self.mm.FACULTY_PREF = self.faculty_pref.get()
-        self.mm.TIMES_NAME = self.interview_times.get()
-        self.mm.FACULTY_AVAILABILITY_NAME = self.faculty_avail.get()
-        self.mm.STUDENT_AVAILABILITY_NAME = self.stud_avail.get()
+#         ''' String Constants '''
+#         self.mm.PATH = self.path.get()
+#         self.mm.STUDENT_PREF = self.stud_pref.get()
+#         self.mm.FACULTY_PREF = self.faculty_pref.get()
+#         self.mm.TIMES_NAME = self.interview_times.get()
+#         self.mm.FACULTY_AVAILABILITY_NAME = self.faculty_avail.get()
+#         self.mm.STUDENT_AVAILABILITY_NAME = self.stud_avail.get()
         
-        self.mm.USE_INTERVIEW_LIMITS = self.var_min_max.get()
-        self.mm.USE_EXTRA_SLOTS = self.var_suggestions.get()
-        self.mm.USE_RANKING = self.var_ranked_pref.get()
-        self.mm.USE_WORK_LUNCH = self.lunch_penalty.get() > 0
-        self.mm.USE_RECRUITING = self.recruiting_weight.get() > 0
-        self.mm.USE_STUDENT_AVAILABILITY = self.var_stud_avail.get()
-        self.mm.USE_FACULTY_AVAILABILITY = self.var_faculty_avail.get()
-        self.mm.USE_TRACKS = self.track_weight.get() > 0
-        self.mm.USE_FACULTY_SIMILARITY = self.faculty_sim_weight.get() > 0
-        self.mm.CHECK_MATCHES = self.var_check_preferences.get()
-        self.mm.PRINT_STUD_PREFERENCE = self.var_stud_match_qualtiy.get()
-        self.mm.PRINT_FACULTY_PREFERENCE = self.var_faculty_match_quality.get()
+#         self.mm.USE_INTERVIEW_LIMITS = self.var_min_max.get()
+#         self.mm.USE_EXTRA_SLOTS = self.var_suggestions.get()
+#         self.mm.USE_RANKING = self.var_ranked_pref.get()
+#         self.mm.USE_WORK_LUNCH = self.lunch_penalty.get() > 0
+#         self.mm.USE_RECRUITING = self.recruiting_weight.get() > 0
+#         self.mm.USE_STUDENT_AVAILABILITY = self.var_stud_avail.get()
+#         self.mm.USE_FACULTY_AVAILABILITY = self.var_faculty_avail.get()
+#         self.mm.USE_TRACKS = self.track_weight.get() > 0
+#         self.mm.USE_FACULTY_SIMILARITY = self.faculty_sim_weight.get() > 0
+#         self.mm.CHECK_MATCHES = self.var_check_preferences.get()
+#         self.mm.PRINT_STUD_PREFERENCE = self.var_stud_match_qualtiy.get()
+#         self.mm.PRINT_FACULTY_PREFERENCE = self.var_faculty_match_quality.get()
         
-        self.mm.NUM_INTERVIEWS = self.num_interviews.get()
-        self.mm.MIN_INTERVIEWS = self.min_interviews.get()
-        self.mm.MAX_INTERVIEWS = self.max_interviews.get()
-        self.mm.FACULTY_ADVANTAGE = self.faculty_advantage.get()
-        self.mm.MAX_RANKING = self.max_ranking.get()
-        self.mm.CHOICE_EXPONENT = self.choice_exponent.get()
-        self.mm.LUNCH_PENALTY = self.lunch_penalty.get()
-        self.mm.LUNCH_PERIOD = self.lunch_period.get()
-        self.mm.RECRUITING_WEIGHT = self.recruiting_weight.get()
-        self.mm.TRACK_WEIGHT = self.track_weight.get()
-        self.mm.FACULTY_SIMILARITY_WEIGHT = self.faculty_sim_weight.get()
-        self.mm.NUM_SIMILAR_FACULTY = self.num_similar_faculty.get()
-        self.mm.NUM_PREFERENCES_2_CHECK = self.num_pref_2_check.get()
-        self.mm.NUM_SUGGESTIONS = self.num_suggestions.get()
-        self.mm.CHECK_FREQUENCY = self.check_frequency.get()
-        self.mm.MAX_SOLVER_TIME_SECONDS = self.max_solver_time_seconds.get()
-        self.mm.EMPTY_PENALTY = self.empty_penalty.get()
+#         self.mm.NUM_INTERVIEWS = self.num_interviews.get()
+#         self.mm.MIN_INTERVIEWS = self.min_interviews.get()
+#         self.mm.MAX_INTERVIEWS = self.max_interviews.get()
+#         self.mm.FACULTY_ADVANTAGE = self.faculty_advantage.get()
+#         self.mm.MAX_RANKING = self.max_ranking.get()
+#         self.mm.CHOICE_EXPONENT = self.choice_exponent.get()
+#         self.mm.LUNCH_PENALTY = self.lunch_penalty.get()
+#         self.mm.LUNCH_PERIOD = self.lunch_period.get()
+#         self.mm.RECRUITING_WEIGHT = self.recruiting_weight.get()
+#         self.mm.TRACK_WEIGHT = self.track_weight.get()
+#         self.mm.FACULTY_SIMILARITY_WEIGHT = self.faculty_sim_weight.get()
+#         self.mm.NUM_SIMILAR_FACULTY = self.num_similar_faculty.get()
+#         self.mm.NUM_PREFERENCES_2_CHECK = self.num_pref_2_check.get()
+#         self.mm.NUM_SUGGESTIONS = self.num_suggestions.get()
+#         self.mm.CHECK_FREQUENCY = self.check_frequency.get()
+#         self.mm.MAX_SOLVER_TIME_SECONDS = self.max_solver_time_seconds.get()
+#         self.mm.EMPTY_PENALTY = self.empty_penalty.get()
         
-        ''' Calculated Constants '''
-        self.mm.all_interviews = range(self.mm.NUM_INTERVIEWS)
-        self.mm.RESULTS_PATH = path.join(self.mm.PATH, 'results')
-        if not path.isdir(self.mm.RESULTS_PATH):
-            makedirs(self.mm.RESULTS_PATH)
+#         ''' Calculated Constants '''
+#         self.mm.all_interviews = range(self.mm.NUM_INTERVIEWS)
+#         self.mm.RESULTS_PATH = path.join(self.mm.PATH, 'results')
+#         if not path.isdir(self.mm.RESULTS_PATH):
+#             makedirs(self.mm.RESULTS_PATH)
 
 
-    def save_defaults(self):
-        filename = filedialog.asksaveasfilename(initialdir=self.path,
-                                                title = "Save defaults",
-                                                filetypes = (("default files","*.def"),
-                                                             ("all files","*.*")))
-        if filename == '':
-            return
+#     def save_defaults(self):
+#         filename = filedialog.asksaveasfilename(initialdir=self.path,
+#                                                 title = "Save defaults",
+#                                                 filetypes = (("default files","*.def"),
+#                                                              ("all files","*.*")))
+#         if filename == '':
+#             return
         
-        with open(filename, 'w') as csvfile:
+#         with open(filename, 'w') as csvfile:
             
-            writer = csv.writer(csvfile, delimiter=',')
-            fields = dir(self)
+#             writer = csv.writer(csvfile, delimiter=',')
+#             fields = dir(self)
             
-            for field in fields:
-                atr = getattr(self, field)
-                if type(atr) == tk.BooleanVar or type(atr) == tk.StringVar or type(atr) == tk.IntVar:                        
-                    writer.writerow([field, atr.get()])
+#             for field in fields:
+#                 atr = getattr(self, field)
+#                 if type(atr) == tk.BooleanVar or type(atr) == tk.StringVar or type(atr) == tk.IntVar:                        
+#                     writer.writerow([field, atr.get()])
                     
-        print('Saved: ' + filename)      
+#         print('Saved: ' + filename)      
         
-    def load_defaults(self):
+#     def load_defaults(self):
         
-        filename = filedialog.askopenfilename(initialdir=self.path,
-                                                title = "Load defaults",
-                                                filetypes = (("default files","*.def"),
-                                                             ("all files","*.*")))
-        if filename == '':
-            return
+#         filename = filedialog.askopenfilename(initialdir=self.path,
+#                                                 title = "Load defaults",
+#                                                 filetypes = (("default files","*.def"),
+#                                                              ("all files","*.*")))
+#         if filename == '':
+#             return
         
-        with open(filename, 'r') as csvfile:
+#         with open(filename, 'r') as csvfile:
             
-            reader = csv.reader(csvfile, delimiter=',')
+#             reader = csv.reader(csvfile, delimiter=',')
             
-            for line in reader:
-                atr = getattr(self, line[0])
-                atr.set(line[1])
+#             for line in reader:
+#                 atr = getattr(self, line[0])
+#                 atr.set(line[1])
             
-        print('Data Loaded: ' + filename)
+#         print('Data Loaded: ' + filename)
         
-        self.master.update()
+#         self.master.update()
         
         
-    def start_matchmaking(self):
-        self.assign_parameters()
-        self.mm.main()        
+#     def start_matchmaking(self):
+#         self.assign_parameters()
+#         self.mm.main()        
         
 ''' Update matches if availability changes '''
 class re_match_maker(match_maker):
@@ -2502,7 +2209,7 @@ class re_match_maker(match_maker):
     def main(self):
         
         # Check parameter validity
-        input_checker(self)        
+        InputCheckerNoThrow(self)        
         
         with open(path.join(self.RESULTS_PATH, self.LOG_FILE_NAME), 'w') as self.log_file:
 
@@ -2725,14 +2432,6 @@ class re_match_maker(match_maker):
         self.print('')
         
         
-        
 if __name__ == '__main__':
-    
-    #rm = re_match_maker("/media/veracrypt1/Users/Cale/Documents/Calers_Writing/PhD/GEC/scheduling_software/2019_data/processed_for_program")
-    #rm.main()
-    
-#    mm = match_maker()
-#    mm.main()
      mm = match_maker()
      mm.main()
-      # g = gui(mm)

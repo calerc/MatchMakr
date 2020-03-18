@@ -1,41 +1,99 @@
 import sys
-from PyQt5.QtCore import Qt, pyqtSlot, QObject, pyqtSignal
+from PyQt5.QtGui import QTextCursor
+from PyQt5.QtCore import Qt, pyqtSlot, QObject, pyqtSignal, QTextStream, QThread
 from PyQt5.QtWidgets import QMainWindow, QDockWidget, QListWidget, QHBoxLayout, QVBoxLayout, QSpacerItem, QListWidgetItem
 from PyQt5.QtWidgets import QApplication, QTextEdit, QAction, QPushButton, QFrame, QGridLayout, QSizePolicy, QLabel
-from PyQt5.QtWidgets import QStackedWidget, QFileDialog, QSpinBox, QCheckBox, QLineEdit, QMessageBox
-from itertools import product
+from PyQt5.QtWidgets import QStackedWidget, QFileDialog, QSpinBox, QCheckBox, QLineEdit, QMessageBox, QWidget, QStatusBar 
 from ipdb import set_trace
 from os import getcwd
 from os.path import join
 import yaml
 import shutil
-from open_house_scheduling import match_maker
-from contextlib import redirect_stdout
-import io
-import time
+from match_maker import match_maker
 import threading
+from queue import Queue
+from time import sleep
 
-# class Communicate(QObject):
-#     detect_change = pyqtSignal(str)
+global stop_threads
+stop_threads = False
 
-# def detect_change(callback_function, string_io, frame):
-#     signal_src = Communicate()
-#     signal_src.detect_change.connect(callback_function)
-    
-#     old_value = string_io.getvalue()
-    
-#     while frame:
-#         string_io.flush()
-#         new_value = string_io.getvalue()
-#         if new_value == old_value:
-#             is_same = str(1)
-#         else:
-#             is_same = str(0)
-#             old_value = new_value
-            
-#         # time.sleep(0.0001)
+'''
+    TODO:
+        Add re_match_maker
+        Create icon
+        Clean up
+        Create Exectuable and Documentation
+'''
+class Makr2Maker():
+
+    def __init__(self, matchMakr):
+        self.match_maker = matchMakr.match_maker
+        self.matchMakr = matchMakr
         
-#         signal_src.detect_change.emit(is_same)
+    def apply_settings(self):
+        settings_dict = self.matchMakr.get_settings_dict()
+        
+        conversion_dict = {
+                            'USE_FACULTY_AVAILABILITY' : 'cb_fac_avail',
+                            'PRINT_FACULTY_PREFERENCE' : 'cb_print_fac_pref',
+                            'PRINT_STUDENT_PREFERENCE' : 'cb_print_stud_pref',
+                            'USE_INTERVIEW_LIMITS' : 'cb_use_inter_limits',
+                            'USE_STUDENT_AVAILABILITY' : 'cb_stud_avail',
+                            'USE_RANKING' : 'cb_use_rank',
+                            'CHECK_FREQUENCY' : 'sb_check_freq',
+                            'EMPTY_PENALTY' : 'sb_empty_penalty',
+                            'CHOICE_EXPONENT' : 'sb_exp',
+                            'FACULTY_ADVANTAGE' : 'sb_fac_advantage',
+                            'FACULTY_SIMILARITY_WEIGHT' : 'sb_fac_sim_weight',
+                            'LUNCH_PENALTY' :'sb_lunch_penalty',
+                            'LUNCH_PERIOD' :'sb_lunch_period',
+                            'MAX_INTERVIEWS' : 'sb_max_num_inter',
+                            'MIN_INTERVIEWS' : 'sb_min_num_inter',
+                            'NUM_SUGGESTIONS' : 'sb_num_extra_matches',
+                            'NUM_INTERVIEWS' : 'sb_num_inter',
+                            'NUM_PREFERENCES_2_CHECK' : 'sb_num_pref_2_check',
+                            'NUM_SIMILAR_FACULTY' : 'sb_num_sim_fac',
+                            'RECRUITING_WEIGHT' : 'sb_recruit_weight',
+                            'TRACK_WEIGHT' : 'sb_track_weight',
+                            'FACULTY_AVAILABILITY_NAME' : 'tb_fac_avail',
+                            'FACULTY_PREF' : 'tb_fac_pref',
+                            'FACULTY_SCHEDULES_DIR' : 'tb_fac_sched_dir',
+                            'LOG_FILE_NAME' : 'tb_log_name',
+                            'PATH' : 'tb_path',
+                            'STUDENT_AVAILABILITY_NAME' : 'tb_stud_avail',
+                            'STUDENT_PREF' : 'tb_stud_pref',
+                            'STUDENT_SCHEDULES_DIR' : 'tb_stud_sched_dir'
+                           }
+        
+        for key, value in zip(conversion_dict.keys(), conversion_dict.values()):
+            val = settings_dict[value]            
+            setattr(self.match_maker, key, val)
+            
+        # Set parameters that can't be done programmatically
+        self.match_maker.MATCHES_CSV_FILE = settings_dict['tb_match'] + '.csv'
+        self.match_maker.MATCHES_TXT_FILE = settings_dict['tb_match'] + '.txt'
+        self.match_maker.RESULTS_PATH = join(settings_dict['tb_path'], settings_dict['tb_results_dir'])
+        
+        # Set use parameters based on weights
+        if self.match_maker.FACULTY_SIMILARITY_WEIGHT == 0:
+            self.match_maker.USE_FACULTY_SIMILARITY = False
+        else:
+            self.match_maker.USE_FACULTY_SIMILARITY = True
+        
+        if self.match_maker.LUNCH_PENALTY == 0:
+            self.match_maker.USE_WORK_LUNCH = False
+        else:
+            self.match_maker.USE_WORK_LUNCH = True
+        
+        if self.match_maker.NUM_PREFERENCES_2_CHECK == 0:
+            self.match_maker.USE_EXTRA_SLOTS = False
+        else:
+            self.match_maker.USE_EXTRA_SLOTS = True
+            
+        if self.match_maker.NUM_SIMILAR_FACULTY == 0:
+            self.match_maker.USE_FACULTY_SIMILARITY = False
+        else:
+            self.match_maker.USE_FACULTY_SIMILARITY = True            
 
 class Dock(QListWidget):
     
@@ -72,13 +130,12 @@ class LineBox(QLineEdit):
         self.get_file = False
     
     def mouseDoubleClickEvent(self, event):
-        
-        print('Double Clicked:' + self.text())
-        
+                
         if self.get_file:
-            self.setText('Double Clicked')
+            dir_name = QFileDialog.getExistingDirectory(self, 'Select Directory', self.text())
+            if dir_name != '':
+                self.setText(dir_name)
       
-
 class SettingsFrame(QFrame):
     
     def __init__(self, q_main_window):
@@ -103,10 +160,14 @@ class SettingsFrame(QFrame):
         self.define_settings()
              
     def save_settings(self):
+        self.q_main_window.parent().statusBar.showMessage('Saving Settings...')
         self.q_main_window.parent().save_settings()
+        self.q_main_window.parent().statusBar.showMessage('Done')
         
     def load_settings(self):
+        self.q_main_window.parent().statusBar.showMessage('Loading Settings...')
         self.q_main_window.parent().load_settings()
+        self.q_main_window.parent().statusBar.showMessage('Done')
 
     def define_settings(self):
         self.define_labels()
@@ -209,7 +270,6 @@ class SettingsFrame(QFrame):
         # Buttons
         self.bt_load = add_button(self, 'Load Settings', self.load_settings)
         self.bt_save = add_button(self, 'Save Settings', self.save_settings)
-
           
 class AdvancedSettingsFrame(SettingsFrame):
     
@@ -229,6 +289,7 @@ class AdvancedSettingsFrame(SettingsFrame):
         self.add_label("Use Faculty Availabitily:")
         self.add_label("Print Student Preferences:")
         self.add_label("Print Faculty Preferences:")
+        self.add_label("Use Interview Limits:")
         
         self.add_label("Choice Exponent:")
         self.add_label("Lunch Penalty:")
@@ -255,6 +316,7 @@ class AdvancedSettingsFrame(SettingsFrame):
         self.cb_fac_avail = self.add_widget(QCheckBox)
         self.cb_print_stud_pref = self.add_widget(QCheckBox)
         self.cb_print_fac_pref = self.add_widget(QCheckBox)
+        self.cb_use_inter_limits = self.add_widget(QCheckBox)
         
         # Spin Boxes        
         self.sb_exp = self.add_widget(QSpinBox)
@@ -279,6 +341,7 @@ class AdvancedSettingsFrame(SettingsFrame):
         self.cb_fac_avail.setChecked(True)
         self.cb_print_stud_pref.setChecked(False)
         self.cb_print_fac_pref.setChecked(True)
+        self.cb_use_inter_limits.setChecked(True)
         
         # Spin boxes (numbers)
         self.set_min_max_def(self.sb_exp, 0, 10, 4)
@@ -294,7 +357,7 @@ class AdvancedSettingsFrame(SettingsFrame):
        
 class RunFrame(QFrame):
     
-    def __init__(self, q_main_window, f):
+    def __init__(self, q_main_window):
         super(RunFrame, self).__init__()
         
         # Split the frame
@@ -304,6 +367,10 @@ class RunFrame(QFrame):
         self.split_frame.addWidget(self.output_frame, 2)
         self.split_frame.addWidget(self.button_frame)
         self.output = QTextEdit(self.output_frame)
+        self.output.setReadOnly(True)
+        print(self.output.isReadOnly())
+        # self.output_cursor = QTextCursor(self.output)
+        
         self.button_layout = QHBoxLayout(self.button_frame)
         
         # Store the parent
@@ -313,19 +380,17 @@ class RunFrame(QFrame):
         self.define_settings()
         self.define_text_output()
         
-        # Logging
-        # sys.stdout.write = self.output.insertPlainText
-        # print('testing')
-        # self.f = f
-        # self.start_detect_change()
+        # Running
+        # self.stop_running = False
+        self.m2m = Makr2Maker(self.q_main_window)
     
-    def update_text_listener(self, is_same):
+    def update_text_listener(self, is_same, new_string):        
         if is_same == '0':
-            self.update_text()
+            self.new_text(new_string)
     
-    # def start_detect_change(self):
-    #     self.thread = threading.Thread(target=detect_change, args=(self.update_text_listener, self.f, self))
-    #     self.thread.start()
+    def new_text(self, text):
+        self.output.setText(text)
+        QApplication.processEvents()
         
     def define_settings(self):
         self.define_controls()
@@ -341,27 +406,31 @@ class RunFrame(QFrame):
         
         self.bt_validate = add_button(self, 'Validate', self.validate)
         self.bt_run = add_button(self, 'Run', self.run)
+        self.bt_interrupt = add_button(self, 'Interrupt', self.interrupt)
         self.bt_clear = add_button(self, 'Clear Output', self.clear_output)
-        self.bt_remove_results = add_button(self, 'Remove Results', self.remove_results)
+        self.bt_remove_results = add_button(self, 'Remove Results', self.remove_results)    
     
-    def update_text(self):
-        pass
-        # self.f.flush()
-        # text = self.f.getvalue()
-        # self.output.setText(text)
-        # time.sleep(1)
+    def interrupt(self):
+        self.q_main_window.is_interrupting = True
+        self.q_main_window.statusBar.showMessage('Interrupting')
+        self.q_main_window.match_maker.stopSearch()
+        self.q_main_window.match_maker.is_running = False
+        self.q_main_window.statusBar.showMessage('Matchmaking Interrupted')
+        self.q_main_window.is_interrupting = False
         
     def validate(self):
-        self.q_main_window.match_maker.validate()
-        self.update_text()
-        
+        self.q_main_window.statusBar.showMessage('Validating...')
+        self.m2m.apply_settings()
+        t = threading.Thread(target=self.q_main_window.match_maker.validate)
+        t.start()      
     
     def run(self):
-        self.q_main_window.match_maker.main()
+        self.m2m.apply_settings()
+        t = threading.Thread(target=self.q_main_window.match_maker.main)
+        t.start()
+        # self.q_main_window.is_running = False
     
     def clear_output(self):
-        self.q_main_window.f.truncate(0)
-        self.q_main_window.f.seek(0)
         self.output.setText('')
     
     def remove_results(self):
@@ -371,9 +440,12 @@ class RunFrame(QFrame):
         self.dir_to_remove = join(working_dir, results_dir)
         
         def callback(button_pressed):
-            if button_pressed.text() == 'Ok':
-                shutil.rmtree(self.dir_to_remove)
-                print('Results Removed')
+            if button_pressed.text() == '&OK':
+                try:
+                    shutil.rmtree(self.dir_to_remove)
+                    print('Directory Removed: ' + self.dir_to_remove)
+                except:
+                    print('Directory not found: ' + self.dir_to_remove)
             else:
                 return
         
@@ -386,10 +458,7 @@ class RunFrame(QFrame):
         dialog.buttonClicked.connect(callback)
         dialog.exec_()
         
-        
     def define_text_output(self):
-        # text = "Her extensive perceived may any sincerity extremity. Indeed add rather may pretty see. Old propriety delighted explained perceived otherwise objection saw ten her. Doubt merit sir the right these alone keeps. By sometimes intention smallness he northward. Consisted we otherwise arranging commanded discovery it explained. Does cold even song like two yet been. Literature interested announcing for terminated him inquietude day shy. Himself he fertile chicken perhaps waiting if highest no it. Continued promotion has consulted fat improving not way.  Folly was these three and songs arose whose. Of in vicinity contempt together in possible branched. Assured company hastily looking garrets in oh. Most have love my gone to this so. Discovered interested prosperous the our affronting insipidity day. Missed lovers way one vanity wishes nay but. Use shy seemed within twenty wished old few regret passed. Absolute one hastened mrs any sensible.   Or kind rest bred with am shed then. In raptures building an bringing be. Elderly is detract tedious assured private so to visited. Do travelling companions contrasted it. Mistress strongly remember up to. Ham him compass you proceed calling detract. Better of always missed we person mr. September smallness northward situation few her certainty something.   Sportsman delighted improving dashwoods gay instantly happiness six. Ham now amounted absolute not mistaken way pleasant whatever. At an these still no dried folly stood thing. Rapid it on hours hills it seven years. If polite he active county in spirit an. Mrs ham intention promotion engrossed assurance defective. Confined so graceful building opinions whatever trifling in. Insisted out differed ham man endeavor expenses. At on he total their he songs. Related compact effects is on settled do.   Do am he horrible distance marriage so although. Afraid assure square so happen mr an before. His many same been well can high that. Forfeited did law eagerness allowance improving assurance bed. Had saw put seven joy short first. Pronounce so enjoyment my resembled in forfeited sportsman. Which vexed did began son abode short may. Interested astonished he at cultivated or me. Nor brought one invited she produce her.   Barton did feebly change man she afford square add. Want eyes by neat so just must. Past draw tall up face show rent oh mr. Required is debating extended wondered as do. New get described applauded incommode shameless out extremity but. Resembled at perpetual no believing is otherwise sportsman. Is do he dispatched cultivated travelling astonished. Melancholy am considered possession on collecting everything.   May indulgence difficulty ham can put especially. Bringing remember for supplied her why was confined. Middleton principle did she procuring extensive believing add. Weather adapted prepare oh is calling. These wrong of he which there smile to my front. He fruit oh enjoy it of whose table. Cultivated occasional old her unpleasing unpleasant. At as do be against pasture covered viewing started. Enjoyed me settled mr respect no spirits civilly.   Dashwood contempt on mr unlocked resolved provided of of. Stanhill wondered it it welcomed oh. Hundred no prudent he however smiling at an offence. If earnestly extremity he he propriety something admitting convinced ye. Pleasant in to although as if differed horrible. Mirth his quick its set front enjoy hoped had there. Who connection imprudence middletons too but increasing celebrated principles joy. Herself too improve gay winding ask expense are compact. New all paid few hard pure she.   That know ask case sex ham dear her spot. Weddings followed the all marianne nor whatever settling. Perhaps six prudent several her had offence. Did had way law dinner square tastes. Recommend concealed yet her procuring see consulted depending. Adieus hunted end plenty are his she afraid. Resources agreement contained propriety applauded neglected use yet.  Up unpacked friendly ecstatic so possible humoured do. Ample end might folly quiet one set spoke her. We no am former valley assure. Four need spot ye said we find mile. Are commanded him convinced dashwoods did estimable forfeited. Shy celebrated met sentiments she reasonably but. Proposal its disposed eat advanced marriage sociable. Drawings led greatest add subjects endeavor gay remember. Principles one yet assistance you met impossible."
-        # self.output.setText(text)
         self.output.setReadOnly(True)
         self.resize_text_output()
         
@@ -397,29 +466,11 @@ class RunFrame(QFrame):
         frame_width = self.output_frame.width()
         frame_height = self.output_frame.height()
         self.output.resize(frame_width, frame_height)
-
-
-
-class IOChecker(QTextEdit):
-    has_changed= pyqtSignal('QString')
-    
-    def __init__(self, parent, f):
-        super(IOChecker, self).__init__(parent)
-        self.f = f
-        
-    def connect_and_emit_has_changed(self, string):
-        self.has_changed.connect(self.detect_change)
-        self.has_changed.emit()
-        
-    def detect_change(self, f):
-        print("Slot Called")
-        if f != self.f:
-            print("Has Changed")
-    
+  
 
 class MatchMakr(QMainWindow):
     
-    def __init__(self, match_maker, f, parent=None):
+    def __init__(self, match_maker, parent=None):
         
         super(MatchMakr, self).__init__(parent)
 		
@@ -429,22 +480,24 @@ class MatchMakr(QMainWindow):
         self.width = 640
         self.height = 480
         
+        # Match_maker
+        self.match_maker = match_maker
+        
         # Workflow
         self.items = QDockWidget("Workflow", self)
+        
         self.listWidget = Dock(self)
         self.items.setWidget(self.listWidget)
         self.items.setFloating(False)
+        self.items.setFeatures(QDockWidget.DockWidgetMovable)
+        # self.items.DockWidgetClosable = False
         self.addDockWidget(Qt.LeftDockWidgetArea, self.items)
-        
-        # Standard Output Redirect
-        self.f = f
         
         # Widget Stack
         self.stacked_widget = QStackedWidget(self) 
         
         # Output
-        self.run_frame = RunFrame(self, self.f)
-        # self.output = QTextEdit(self.stacked_widget)
+        self.run_frame = RunFrame(self)
         
         # Settings Frame               
         self.settings_frame = SettingsFrame(self.stacked_widget)
@@ -453,28 +506,31 @@ class MatchMakr(QMainWindow):
         self.stacked_widget.addWidget(self.advanced_settings_frame)
         self.stacked_widget.addWidget(self.run_frame)
         
+        # Status bar
+        self.statusBar = QStatusBar()
+        self.setStatusBar(self.statusBar)
+        self.statusBar.showMessage('Waiting...')
+        self.is_interrupting = False
+        self.is_running = False
+        
         # Other GUI Setup
+        self.update_status_thread = threading.Thread(target=self.thread_update_progress_bar)
+        self.update_status_thread.start()
         self.setCentralWidget(self.stacked_widget)
         self.stacked_widget.setCurrentWidget(self.settings_frame)
         self.setWindowTitle("MatchMakr - Match Interviewers with Interviewees")
         
-        # Match_maker
-        self.match_maker = match_maker
-        
-        
+                
     
     def settings_callback(self):
         self.stacked_widget.setCurrentWidget(self.settings_frame)
-        # print("Settings")
     
     def advanced_settings_callback(self):
         self.stacked_widget.setCurrentWidget(self.advanced_settings_frame)
-        # print("Advanced Settings")
         
     def run_callback(self):
         self.stacked_widget.setCurrentWidget(self.run_frame)
         self.run_frame.resize_text_output()
-        # print('Run')
         
     def load_settings(self):
         settings = [self.settings_frame, self.advanced_settings_frame]
@@ -483,8 +539,7 @@ class MatchMakr(QMainWindow):
         filename = filename[0]
         if filename == '':
             return
-        # filename = join(getcwd(), 'settings.yaml')
-        print('Saving to file: ' + filename)
+        print('Loading Settings from file: ' + filename)
         
         with open(filename, 'r') as f:
             settings_dictionary = yaml.safe_load(f)
@@ -493,7 +548,6 @@ class MatchMakr(QMainWindow):
             
         for s in settings:
             s_keys = s.__dict__.keys()
-            # s_values = s.__dict__.values()
             for key, value in zip(yaml_keys, yaml_values):
                 if key in s_keys:
                     prefix = key[0:3]
@@ -504,8 +558,8 @@ class MatchMakr(QMainWindow):
                         widget.setChecked(value)
                     elif prefix == 'sb_':
                         widget.setValue(value)
-        
-    def save_settings(self):
+                        
+    def get_settings_dict(self):
         settings = [self.settings_frame, self.advanced_settings_frame]        
         settings_dictionary = {}
         
@@ -521,6 +575,12 @@ class MatchMakr(QMainWindow):
                     settings_dictionary[key] = value.isChecked()
                 elif prefix == 'sb_':
                     settings_dictionary[key] = value.value()
+                    
+        return settings_dictionary
+        
+    def save_settings(self):      
+        
+        settings_dictionary = self.get_settings_dict()        
         
         filename = QFileDialog.getSaveFileName(self, 'Select File', getcwd(), 'YAML Files (*.yaml)')
         filename = filename[0]
@@ -530,53 +590,109 @@ class MatchMakr(QMainWindow):
         
         with open(filename, 'w') as f:
             yaml.safe_dump(settings_dictionary, f)
-                        
-                
+            
+    @pyqtSlot(str)        
+    def append_text(self, text):
+        self.run_frame.output.moveCursor(QTextCursor.End)
+        self.run_frame.output.insertPlainText(text)
         
-    def close_application(self):
-        pass
+        
+    
+    def thread_update_progress_bar(self):
+        SLEEP_TIME = 0.1
+        was_running = False
+        
+        global stop_threads
+        
+        while not stop_threads:
+            if self.match_maker.is_running and not self.is_interrupting:
+                self.statusBar.showMessage('Running')
+                sleep(SLEEP_TIME)
+                self.statusBar.showMessage('Running.')
+                sleep(SLEEP_TIME)
+                self.statusBar.showMessage('Running..')
+                sleep(SLEEP_TIME)
+                self.statusBar.showMessage('Running...')
+                sleep(SLEEP_TIME)
+                
+                was_running = True
+                
+            elif was_running:
+                was_running = False
+                self.statusBar.showMessage('Done')
     
     def resizeEvent(self, event):
         self.run_frame.resize_text_output()
         
+    def closeEvent(self, event):
+        
+        # Stop Matchmaking
+        self.run_frame.interrupt()
+        
+        # Stop other threads
+        global stop_threads
+        stop_threads = True
+        self.update_status_thread.join()
+        
+        # Exit
+        event.accept()
+ 
+'''
+    ----------------------------------------------------------------------------
+'''
 
-class TextRedirector(object):
-    def __init__(self, widget, tag="stdout"):
-        self.widget = widget
-        self.tag = tag
+# The new Stream Object which replaces the default stream associated with sys.stdout
+# This object just puts data in a queue!
+class WriteStream(object):
+    def __init__(self,queue):
+        self.queue = queue
 
-    def write(self, str):
-        # self.widget.configure(state="normal")
-        self.widget.append(str)
-        # self.widget.configure(state="disabled")
+    def write(self, text):
+        self.queue.put(text)
+        
+    def flush(self):
+        pass
+
+# A QObject (to be run in a QThread) which sits waiting for data to come through a Queue.Queue().
+# It blocks until data is available, and one it has got something from the queue, it sends
+# it to the "MainThread" by emitting a Qt Signal 
+class MyReceiver(QObject):
+    mysignal = pyqtSignal(str)
+
+    def __init__(self,queue,*args,**kwargs):
+        QObject.__init__(self,*args,**kwargs)
+        self.queue = queue
+
+    @pyqtSlot()
+    def run(self):
+        while True:
+            text = self.queue.get()
+            self.mysignal.emit(text)
+
+'''
+    ----------------------------------------------------------------------------
+'''
 
 
 if __name__ == '__main__':
     
+    # My app
     app = QApplication(sys.argv)
     m_m = match_maker()
-   
-    f = io.StringIO()    
-    # with redirect_stdout(f):
-    mm = MatchMakr(m_m, f)
-    m_m.printer = mm.run_frame.output.insertPlainText
+    mm = MatchMakr(m_m)
+    mm.show()    
     
-    # sys.stdout.write = mm.run_frame.output.insertPlainText
-    # sys.stderr.write = mm.run_frame.output.insertPlainText
-    # sys.stdout = TextRedirector(mm.run_frame.output, "stdout")
-    # def redirect(func):
-    #     def inner(s):
-    #         try:
-    #             mm.run_frame.output.setText(s)
-    #             return func
-    #         except:
-    #             return inner
-    # sys.stdout.write=redirect(sys.stdout.write)
-            
-    # def redirect(s):
-    #     mm.run_frame.output.setText(s)
-    # sys.stdout.write = redirect
-    print('test')
+    # Create Queue and redirect sys.stdout to this queue
+    queue = Queue()
+    sys.stdout = WriteStream(queue)
+    sys.stderr = WriteStream(queue)
     
-    mm.show()
+    # Create thread that will listen on the other end of the queue, and send the text to the textedit in our application
+    thread = QThread()
+    my_receiver = MyReceiver(queue)
+    my_receiver.mysignal.connect(mm.append_text)
+    my_receiver.moveToThread(thread)
+    thread.started.connect(my_receiver.run)
+    thread.start()
+    
     sys.exit(app.exec_())
