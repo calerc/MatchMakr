@@ -7,7 +7,7 @@ from ortools.sat import sat_parameters_pb2
 from ortools.sat.python import cp_model
 from pdf_writer import PDFWriter
 from input_checker import InputCheckerNoThrow
-from my_or_tools import VarArrayAndObjectiveSolutionPrinter, ORSolver, ResponseError
+from my_or_tools import VarArrayAndObjectiveSolutionPrinter, ORSolver
 import numpy as np
 import csv
 import warnings
