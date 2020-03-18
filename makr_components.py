@@ -1,8 +1,7 @@
-from PyQt5.QtGui import QTextCursor, QIcon
-from PyQt5.QtCore import Qt, pyqtSlot, QObject, pyqtSignal, QTextStream, QThread
-from PyQt5.QtWidgets import QMainWindow, QDockWidget, QListWidget, QHBoxLayout, QVBoxLayout, QSpacerItem, QListWidgetItem
-from PyQt5.QtWidgets import QApplication, QTextEdit, QAction, QPushButton, QFrame, QGridLayout, QSizePolicy, QLabel
-from PyQt5.QtWidgets import QStackedWidget, QFileDialog, QSpinBox, QCheckBox, QLineEdit, QMessageBox, QWidget, QStatusBar 
+from PyQt5.QtCore import Qt
+from PyQt5.QtWidgets import QListWidget, QHBoxLayout, QVBoxLayout, QLabel
+from PyQt5.QtWidgets import QApplication, QTextEdit, QPushButton, QFrame, QGridLayout
+from PyQt5.QtWidgets import QFileDialog, QSpinBox, QCheckBox, QLineEdit, QMessageBox 
 
 from os import getcwd
 from os import path

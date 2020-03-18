@@ -3,6 +3,10 @@ from __future__ import division
 from __future__ import print_function
 
 from ortools.sat.python import cp_model
+from ortools.sat.python.cp_model import EvaluateLinearExpression
+from ortools.sat import pywrapsat
+
+import numpy as np
 
 
 '''
