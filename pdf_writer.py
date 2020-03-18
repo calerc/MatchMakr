@@ -1,3 +1,10 @@
+from reportlab.pdfgen import canvas
+
+
+'''
+    PDFWriter
+    Write schedules to PDF files
+'''
 class PDFWriter():
     
     def __init__(self):
