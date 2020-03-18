@@ -1,8 +1,9 @@
 import sys
+from PyQt5.QtGui import QTextCursor
 from PyQt5.QtCore import Qt, pyqtSlot, QObject, pyqtSignal, QTextStream, QThread
 from PyQt5.QtWidgets import QMainWindow, QDockWidget, QListWidget, QHBoxLayout, QVBoxLayout, QSpacerItem, QListWidgetItem
 from PyQt5.QtWidgets import QApplication, QTextEdit, QAction, QPushButton, QFrame, QGridLayout, QSizePolicy, QLabel
-from PyQt5.QtWidgets import QStackedWidget, QFileDialog, QSpinBox, QCheckBox, QLineEdit, QMessageBox, QWidget, QStatusBar
+from PyQt5.QtWidgets import QStackedWidget, QFileDialog, QSpinBox, QCheckBox, QLineEdit, QMessageBox, QWidget, QStatusBar 
 from ipdb import set_trace
 from os import getcwd
 from os.path import join
@@ -18,9 +19,6 @@ stop_threads = False
 
 '''
     TODO:
-        Harden match_maker
-        Stop freezing on program close
-        Stop Freezing of interrupt
         Add re_match_maker
         Create icon
         Clean up
@@ -369,6 +367,10 @@ class RunFrame(QFrame):
         self.split_frame.addWidget(self.output_frame, 2)
         self.split_frame.addWidget(self.button_frame)
         self.output = QTextEdit(self.output_frame)
+        self.output.setReadOnly(True)
+        print(self.output.isReadOnly())
+        # self.output_cursor = QTextCursor(self.output)
+        
         self.button_layout = QHBoxLayout(self.button_frame)
         
         # Store the parent
@@ -591,12 +593,7 @@ class MatchMakr(QMainWindow):
             
     @pyqtSlot(str)        
     def append_text(self, text):
-    #     t = threading.Thread(target=self.thread_append_text, args=(text,))
-    #     t.start()
-        
-    # def thread_append_text(self, text):
-        bottom = self.run_frame.output.verticalScrollBar().maximum()
-        self.run_frame.output.verticalScrollBar().setValue(bottom)
+        self.run_frame.output.moveCursor(QTextCursor.End)
         self.run_frame.output.insertPlainText(text)
         
         
