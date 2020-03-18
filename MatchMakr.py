@@ -1,20 +1,14 @@
 import sys
 from PyQt5.QtGui import QTextCursor, QIcon
-from PyQt5.QtCore import Qt, pyqtSlot, QObject, pyqtSignal, QTextStream, QThread
-from PyQt5.QtWidgets import QMainWindow, QDockWidget, QListWidget, QHBoxLayout, QVBoxLayout, QSpacerItem, QListWidgetItem
-from PyQt5.QtWidgets import QApplication, QTextEdit, QAction, QPushButton, QFrame, QGridLayout, QSizePolicy, QLabel
-from PyQt5.QtWidgets import QStackedWidget, QFileDialog, QSpinBox, QCheckBox, QLineEdit, QMessageBox, QWidget, QStatusBar 
-from ipdb import set_trace
+from PyQt5.QtCore import Qt, pyqtSlot, QObject, pyqtSignal, QThread
+from PyQt5.QtWidgets import QMainWindow, QDockWidget, QApplication, QStackedWidget, QFileDialog, QStatusBar 
 from os import getcwd
-from os.path import join
 import yaml
-import shutil
 from match_maker import match_maker
 import threading
 from queue import Queue
 from time import sleep
 from os import path
-from makr_2_maker import Makr2Maker
 from makr_components import SettingsFrame, AdvancedSettingsFrame, RunFrame, Dock
 
 global stop_threads
