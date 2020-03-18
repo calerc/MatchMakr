@@ -7,7 +7,7 @@ from ortools.sat import sat_parameters_pb2
 from ortools.sat.python import cp_model
 from pdf_writer import PDFWriter
 from input_checker import InputCheckerNoThrow
-from my_or_tools import VarArrayAndObjectiveSolutionPrinter, ORSolver
+from my_or_tools import VarArrayAndObjectiveSolutionPrinter, ORSolver, ResponseError
 import numpy as np
 import csv
 import warnings
@@ -668,7 +668,8 @@ class match_maker():
         self.is_recruiting = faculty_pref[1:, col]        
         self.is_recruiting[self.is_recruiting == ''] = 'No'
         
-        self.is_recruiting = self.response_to_weight(self.is_recruiting)
+        self.is_recruiting, error = self.response_to_weight(self.is_recruiting)
+        self.response_error_handler(error, 'RECRUITING')
         
     def load_lunch_data(self, faculty_pref):
         STEM = 'lunch'
@@ -678,7 +679,27 @@ class match_maker():
         self.will_work_lunch = faculty_pref[1:, col]        
         self.will_work_lunch[self.will_work_lunch == ''] = 'Yes'
         
-        self.will_work_lunch = self.response_to_weight(self.will_work_lunch)
+        self.will_work_lunch, error = self.response_to_weight(self.will_work_lunch)
+        
+        self.response_error_handler(error, 'LUNCH')
+                
+    def response_error_handler(self, error, name):
+        if not error:
+            return
+        
+        if self.is_validating:
+            print('For ' + name + ' data:')
+            print(error)
+            print('Valid Responses include only: ')
+            print('    yes')
+            print('    no')
+            print('    maybe')
+            print('    If it helps me interview students that are important to me')
+            print('    If it helps the department...')
+            print('')
+        else:
+            raise ValueError(error)
+        
         
     def find_single_column(self, faculty_pref, stem):
         
@@ -783,14 +804,26 @@ class match_maker():
             availability = self.load_data_from_human_readable(
                 filename).astype(int)
         except:
-            raise ValueError('Availability data at ' + filename + ' is invalid.  Check that all values are 1''s or 0''s')
+            print_text = 'Availability data at ' + filename + ' is invalid.  Check that all values are 1''s or 0''s'
+            if self.is_validating:
+                print(print_text)
+            else:
+                raise ValueError(print_text)
+                
 
         # Check that the number of availabilities is expected
         [_, num_available] = np.shape(availability)
         if num_available != num_expected_available:
-            set_trace()
-            raise ValueError(
-                'The availability data does not match the preference data')
+            error_message = 'The availability data does not match the preference data for file: ' + filename
+            if self.is_validating:
+                print(error_message)
+                print('There are two common causes of this issue: ')
+                print('    1) Different people are listed in availability and preference .csv files')
+                print('    2) Someone filled out the survey more than once (remove all but last entry)')
+                print('')
+                return None, None
+            else:
+                raise ValueError(error_message)
 
         available = np.asarray(
             np.where(
@@ -930,11 +963,13 @@ class match_maker():
                 self.STUDENT_AVAILABILITY_NAME, len(self.student_names))
             
         if self.USE_FACULTY_AVAILABILITY:
+            # set_trace()
             self.faculty_availability, self.faculty_avail = self.load_availability(
                 self.FACULTY_AVAILABILITY_NAME, len(self.faculty_names))          
 
         # Calculate the objective matrix
-        self.calc_objective_matrix()
+        if not self.is_validating:
+            self.calc_objective_matrix()
 
 
     '''
@@ -995,11 +1030,22 @@ class match_maker():
         faculty_col, student_col = self.get_pref_col(faculty_match_data, stud_match_data)         
         
         if len(faculty_col) == 0:
-            set_trace()
-            raise ValueError('Faculty preference data not found')
+            error_message = 'Faculty preference data not found'
+            if self.is_validating():
+                print(error_message)
+                print('Check that the data exists in the faculty preferences csv file')
+                return
+            else:
+                set_trace()
+                raise ValueError(error_message)
         if len(student_col) == 0:
-            set_trace()
-            raise ValueError('Student preference data not found')
+            error_message = 'Student preference data not found'
+            if self.is_validating():
+                print(error_message)
+                print('Check that the data exists in the faculty preferences csv file')                
+            else:
+                set_trace()
+                raise ValueError(error_message)
             
         student_pref = np.transpose(stud_match_data[1:, student_col.astype(int)])
         faculty_pref = np.transpose(faculty_match_data[1:, faculty_col.astype(int)])
@@ -1613,6 +1659,7 @@ class match_maker():
     '''
 
     def response_to_weight(self, array):
+        error = None
         array = array.flatten()
 
         out_array = np.empty(np.shape(array))
@@ -1628,9 +1675,10 @@ class match_maker():
             elif response.lower() == 'ifithelpsthedepartment...':
                 out_array[count] = 0
             else:
-                raise ValueError('Response unknown')
+                error = 'Unknown Response: ' + response
+                # raise ResponseError('Response unknown:' + str(response))
 
-        return out_array
+        return out_array, error
     
     def set_printer(self, function_handle):
         sys.stdout.write = function_handle
@@ -2161,7 +2209,7 @@ class re_match_maker(match_maker):
     def main(self):
         
         # Check parameter validity
-        input_checker(self)        
+        InputCheckerNoThrow(self)        
         
         with open(path.join(self.RESULTS_PATH, self.LOG_FILE_NAME), 'w') as self.log_file:
 

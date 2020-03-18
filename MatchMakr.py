@@ -672,8 +672,8 @@ if __name__ == '__main__':
     
     # Create Queue and redirect sys.stdout to this queue
     queue = Queue()
-    sys.stdout = WriteStream(queue)
-    sys.stderr = WriteStream(queue)
+    # sys.stdout = WriteStream(queue)
+    # sys.stderr = WriteStream(queue)
     
     # Create thread that will listen on the other end of the queue, and send the text to the textedit in our application
     thread = QThread()
@@ -684,3 +684,5 @@ if __name__ == '__main__':
     thread.start()
     
     sys.exit(app.exec_())
+    print('No, here')
+    exit()
