@@ -368,7 +368,7 @@ class RunFrame(QFrame):
         self.split_frame.addWidget(self.button_frame)
         self.output = QTextEdit(self.output_frame)
         self.output.setReadOnly(True)
-        print(self.output.isReadOnly())
+        # print(self.output.isReadOnly())
         # self.output_cursor = QTextCursor(self.output)
         
         self.button_layout = QHBoxLayout(self.button_frame)

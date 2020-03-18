@@ -1,13 +1,11 @@
+from os import path
+
 '''
     input_checker
     Checks input to the match_maker class to make sure they are reasonable
     Call input_checker(match_maker) as the last line of match_maker.__init__
     If no errors result, the match_maker program can continue
 '''
-
-
-
-
 class InputChecker:
 
     def __init__(self, match_maker):
@@ -196,18 +194,14 @@ class InputChecker:
             warnings.warn(
                 'We detected that AVAILABILITY_VALUE does not equal -1 * 5000.  This can cause issues.')
 
-class InputCheckerNoThrow(input_checker):
+class InputCheckerNoThrow(InputChecker):
     
     def __init__(self, match_maker):
         self.mm = match_maker
         try:
+        # if True:
             self.main()
             self.can_continue = True
         except Exception as e:
-            print('Checking settings before applying...')
-            print('Errors (Empty if None)')
-            print('----------------------------------------------------------------------------------------')
             print(e)
-            print('----------------------------------------------------------------------------------------')
-            print('')
             self.can_continue = False
