@@ -699,5 +699,3 @@ if __name__ == '__main__':
     thread.start()
     
     sys.exit(app.exec_())
-    print('No, here')
-    exit()
