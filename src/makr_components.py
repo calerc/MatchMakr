@@ -11,7 +11,7 @@ import threading
 
 
 '''
-    Components of the MatchMakr Gui
+    Various components of the MatchMakr Gui
 '''
 
 

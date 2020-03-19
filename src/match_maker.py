@@ -1050,12 +1050,6 @@ class match_maker():
         student_pref = np.transpose(stud_match_data[1:, student_col.astype(int)])
         faculty_pref = np.transpose(faculty_match_data[1:, faculty_col.astype(int)])
 
-        # Randomize preferences, if necessary
-        # This code doesn't work and is no longer supported
-#        if self.RANDOMIZE_PREFERENCES:
-#            stud_match_data = self.randomize_preferences(stud_match_data)
-#            faculty_match_data = self.randomize_preferences(faculty_match_data)
-
         # Statistics
         self.num_students = len(student_names)
         self.num_faculty = len(faculty_names)

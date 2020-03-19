@@ -2,7 +2,8 @@ from os.path import join
 
 
 '''
-    Take settings from the MatchMaker gui for the function match_maker
+    Translate settings from the MatchMaker gui for the function match_maker
+    Called from MathMakr
 '''
 class Makr2Maker():
 

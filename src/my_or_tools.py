@@ -41,7 +41,7 @@ class ORSolver(cp_model.CpSolver):
 
 '''
     VarArrayAndObjectiveSolutionPrinter
-    callback printer object for ortools solver
+    Callback printer object for ortools solver
 '''
 class VarArrayAndObjectiveSolutionPrinter(cp_model.CpSolverSolutionCallback):
 

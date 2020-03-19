@@ -4,6 +4,7 @@ from reportlab.pdfgen import canvas
 '''
     PDFWriter
     Write schedules to PDF files
+    Called from match_maker
 '''
 class PDFWriter():
     

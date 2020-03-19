@@ -16,7 +16,6 @@ stop_threads = False
 
 '''
     TODO:
-        move classes out of MatchMakr
         Clean up
         Create Exectuable and Documentation
             windows
