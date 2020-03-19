@@ -19,6 +19,10 @@ stop_threads = False
         move classes out of MatchMakr
         Clean up
         Create Exectuable and Documentation
+            windows
+        License
+        Website or file hosting
+        Make public
 '''
            
 class MatchMakr(QMainWindow):

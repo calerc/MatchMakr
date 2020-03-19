@@ -12,7 +12,7 @@ import numpy as np
 import csv
 import warnings
 import multiprocessing
-from ipdb import set_trace
+# from ipdb import set_trace
 import threading
 
 
@@ -751,7 +751,7 @@ class match_maker():
                 if col[i] == 0:
                     raise ValueError('Field not found: ' + col_name)
             except:
-                set_trace()
+                # set_trace()
                 raise ValueError('Field not found: ' + col_name)
                     
         return col
@@ -1036,7 +1036,7 @@ class match_maker():
                 print('Check that the data exists in the faculty preferences csv file')
                 return
             else:
-                set_trace()
+                # set_trace()
                 raise ValueError(error_message)
         if len(student_col) == 0:
             error_message = 'Student preference data not found'
@@ -1044,7 +1044,7 @@ class match_maker():
                 print(error_message)
                 print('Check that the data exists in the faculty preferences csv file')                
             else:
-                set_trace()
+                # set_trace()
                 raise ValueError(error_message)
             
         student_pref = np.transpose(stud_match_data[1:, student_col.astype(int)])
