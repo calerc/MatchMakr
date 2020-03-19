@@ -34,19 +34,7 @@ class InputChecker:
         return False
 
     def main(self):
-
-        # Check that files exist
-        file_names = [
-            self.mm.STUDENT_PREF,
-            self.mm.FACULTY_PREF,
-            self.mm.TIMES_NAME,
-            self.mm.FACULTY_AVAILABILITY_NAME,
-            self.mm.STUDENT_AVAILABILITY_NAME]
-
-        for file in file_names:
-            if not self.check_file_exists(file):
-                raise ValueError(file + ' is not on the path ' + self.mm.PATH)
-
+        
         # Check bools
         if not self.check_bool(self.mm.USE_INTERVIEW_LIMITS):
             raise ValueError('USE_INTERVIEW_LIMITS' + ' should be a bool')
@@ -190,12 +178,26 @@ class InputChecker:
                 ' and ' +
                 'NUM_INTERVIEWS')
 
-        # Check other parameters
+        # Check other parameterss
         if self.mm.AVAILABILITY_VALUE != -1 * 5000:
             warnings.warn(
                 'We detected that AVAILABILITY_VALUE does not equal -1 * 5000.  This can cause issues.')
 
+        # Check that files exist
+        file_names = [
+            self.mm.STUDENT_PREF,
+            self.mm.FACULTY_PREF,
+            self.mm.TIMES_NAME]        
 
+        for file in file_names:
+            if not self.check_file_exists(file):
+                raise ValueError(file + ' is not on the path ' + self.mm.PATH)
+        
+        if self.mm.USE_FACULTY_AVAILABILITY and not self.check_file_exists(self.mm.FACULTY_AVAILABILITY_NAME):
+            raise ValueError(self.mm.FACULTY_AVAILABILITY_NAME + ' is not on the path ' + self.mm.PATH)
+                
+        if self.mm.USE_STUDENT_AVAILABILITY and not self.check_file_exists(self.mm.STUDENT_AVAILABILITY_NAME):
+            raise ValueError(self.mm.STUDENT_AVAILABILITY_NAME + ' is not on the path ' + self.mm.PATH)
 
 '''
     InputCheckerNoThrow
