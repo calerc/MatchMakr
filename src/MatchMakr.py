@@ -14,16 +14,7 @@ from makr_components import SettingsFrame, AdvancedSettingsFrame, RunFrame, Dock
 global stop_threads
 stop_threads = False
 
-'''
-    TODO:
-        Clean up
-        Create Exectuable and Documentation
-            windows
-        License
-        Website or file hosting
-        Make public
-'''
-           
+
 class MatchMakr(QMainWindow):
     
     def __init__(self, match_maker, parent=None):
