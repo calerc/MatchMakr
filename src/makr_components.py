@@ -175,10 +175,33 @@ class SettingsFrame(QFrame):
         
         # Spin Boxes
         self.set_min_max_def(self.sb_num_inter, 0, 99, 9)
-        self.set_min_max_def(self.sb_min_num_inter, 0, 99, 3)
-        self.set_min_max_def(self.sb_max_num_inter, 0, 99, 9)
+        self.set_min_max_def(self.sb_max_num_inter, 0, 9, 9)
+        self.set_min_max_def(self.sb_min_num_inter, 0, 9, 3)
         self.set_min_max_def(self.sb_num_extra_matches, 0, 99, 2)
-        self.set_min_max_def(self.sb_fac_advantage, 0, 999999, 70)      
+        self.set_min_max_def(self.sb_fac_advantage, 0, 100, 70)
+        
+        self.sb_num_inter.valueChanged.connect(self.set_max_interview)
+        self.sb_max_num_inter.valueChanged.connect(self.set_min_interview)
+        
+    def set_min_interview(self):
+        max_value = self.sb_max_num_inter.value()
+        current_value = self.sb_min_num_inter.value()
+        if current_value <= max_value:
+            default_value = current_value
+        else:
+            default_value = max_value
+        self.set_min_max_def(self.sb_min_num_inter, 0, max_value, default_value)
+    
+    def set_max_interview(self):
+        max_value = self.sb_num_inter.value()
+        current_value = self.sb_max_num_inter.value()
+        if current_value <= max_value:
+            default_value = current_value
+        else:
+            default_value = max_value
+        self.set_min_max_def(self.sb_max_num_inter, 0, max_value, default_value)
+        
+        self.set_min_interview()
     
     
     def define_controls(self):
@@ -194,6 +217,7 @@ class SettingsFrame(QFrame):
         self.bt_load = add_button(self, 'Load Settings', self.load_settings)
         self.bt_save = add_button(self, 'Save Settings', self.save_settings)
           
+        
 class AdvancedSettingsFrame(SettingsFrame):
     
     def __init__(self, q_main_window):
@@ -208,10 +232,10 @@ class AdvancedSettingsFrame(SettingsFrame):
         
         # Check Boxes
         self.add_label("Use Ranking:")       
-        self.add_label("Use Student Availability::")
+        self.add_label("Use Student Availability:")
         self.add_label("Use Faculty Availabitily:")
-        self.add_label("Print Student Preferences:")
-        self.add_label("Print Faculty Preferences:")
+        self.add_label("Print Student Match Quality:")
+        self.add_label("Print Faculty Match Quality:")
         self.add_label("Use Interview Limits:")
         
         self.add_label("Choice Exponent:")
@@ -268,7 +292,7 @@ class AdvancedSettingsFrame(SettingsFrame):
         
         # Spin boxes (numbers)
         self.set_min_max_def(self.sb_exp, 0, 10, 4)
-        self.set_min_max_def(self.sb_lunch_penalty, 0, 9999999, 50000)
+        self.set_min_max_def(self.sb_lunch_penalty, 0, 9999999, 0)
         self.set_min_max_def(self.sb_lunch_period, 0, 99, 4)
         self.set_min_max_def(self.sb_recruit_weight, 0, 9999999, 30000)
         self.set_min_max_def(self.sb_track_weight, 0, 9999999, 30000)
