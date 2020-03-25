@@ -1,13 +1,6 @@
-examples
-2019*
-faculty*
-2020*
-__pycache__
-build
-dist
 MatchMakr.spec
-
-
+*.pyc
+data/results
 
 
 
