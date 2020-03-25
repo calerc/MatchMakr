@@ -92,11 +92,13 @@ class MatchMakr(QMainWindow):
         self.stacked_widget.setCurrentWidget(self.run_frame)
         self.run_frame.resize_text_output()
         
-    def load_settings(self):
+    def load_settings(self, filename=None):
         settings = [self.settings_frame, self.advanced_settings_frame]
         
-        filename = QFileDialog.getOpenFileName(self, 'Select File', getcwd(), 'YAML Files (*.yaml)')
-        filename = filename[0]
+        if not filename:
+            filename = QFileDialog.getOpenFileName(self, 'Select File', getcwd(), 'YAML Files (*.yaml)')
+            filename = filename[0]
+            
         if filename == '':
             return
         print('Loading Settings from file: ' + filename)
@@ -242,6 +244,7 @@ if __name__ == '__main__':
     app = QApplication(sys.argv)
     m_m = match_maker()
     mm = MatchMakr(m_m)
+    # mm.load_settings('/media/veracrypt1/Users/Cale/Documents/Calers_Writing/PhD/GEC/scheduling_software/src/2020settings_full.yaml')
     mm.show()    
     
     # Create Queue and redirect sys.stdout to this queue
