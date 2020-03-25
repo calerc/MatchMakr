@@ -308,10 +308,14 @@ class match_maker():
                         self.student_pref[s, :] == match_benefit)
                     if np.shape(faculty_choice)[1] > 0:
                         was_not_matched = np.where(not_matched[s, :])
-                        similar_faculty = self.faculty_similarity[was_not_matched,
-                                                                  faculty_choice]
-                        self.objective_matrix[s, was_not_matched] += similar_faculty * \
-                            self.FACULTY_SIMILARITY_WEIGHT
+                        try:
+                            similar_faculty = self.faculty_similarity[was_not_matched,
+                                                                      faculty_choice]
+                            self.objective_matrix[s, was_not_matched] += similar_faculty * \
+                                self.FACULTY_SIMILARITY_WEIGHT
+                        except:
+                            set_trace()
+                            raise ValueError('There is more than one entry for student' + self.student_names[s])
 
         # Expand the objective_matrix to cover each interview period
         self.objective_matrix = np.reshape(
@@ -880,8 +884,16 @@ class match_maker():
             reader = csv.reader(csvfile, delimiter=',')
             for row in reader:
                 self.interview_times.append(row)
-
-        self.NUM_INTERVIEWS = len(self.interview_times)
+        
+        num_interviews = len(self.interview_times)
+        if num_interviews != self.NUM_INTERVIEWS:
+            error_message = 'Number of interview times does not match number of interviews listed in ' + self.TIMES_NAME
+            if self.is_validating:
+                self.print(error_message)
+                self.print('')
+            else:
+                raise ValueError(error_message)
+        # self.NUM_INTERVIEWS = len(self.interview_times)
 
     '''
         Load the data
@@ -1031,7 +1043,7 @@ class match_maker():
         
         if len(faculty_col) == 0:
             error_message = 'Faculty preference data not found'
-            if self.is_validating():
+            if self.is_validating:
                 print(error_message)
                 print('Check that the data exists in the faculty preferences csv file')
                 return
@@ -1040,7 +1052,7 @@ class match_maker():
                 raise ValueError(error_message)
         if len(student_col) == 0:
             error_message = 'Student preference data not found'
-            if self.is_validating():
+            if self.is_validating:
                 print(error_message)
                 print('Check that the data exists in the faculty preferences csv file')                
             else:
@@ -1055,6 +1067,31 @@ class match_maker():
         self.num_faculty = len(faculty_names)
         self.all_students = range(self.num_students)
         self.all_faculty = range(self.num_faculty)
+        
+        
+        # num_unique_faculty = len(np.unique(faculty_names))
+        # num_unique_students = len(np.unique(student_names))
+        
+        # Check for duplicates
+        unique_faculty, unique_faculty_count = np.unique(faculty_names, return_counts=True)
+        unique_students, unique_student_count = np.unique(student_names, return_counts=True)
+        
+        if np.any(unique_faculty_count > 1):
+            names = unique_faculty[unique_faculty_count > 1]
+            self.print('There are duplicate faculty:')
+            [self.print(name) for name in names]
+            self.print('')
+            if not self.is_validating:
+                raise ValueError('There are duplicate faculty')
+                
+        if np.any(unique_student_count > 1):            
+            names = unique_students[unique_student_count > 1]
+            self.print('There are duplicate students:')
+            [self.print(name) for name in names]   
+            self.print('')
+            if not self.is_validating:
+                raise ValueError('There are duplicate students')
+        
                 
         # Fill-in faculty preferences
         self.faculty_pref = np.zeros((self.num_students, self.num_faculty))
@@ -1096,6 +1133,7 @@ class match_maker():
                 else:
                     self.student_pref[s, faculty_num] = self.MAX_RANKING - pref_num
                     pref_num += 1
+                
         unique_unfound_names = np.asarray(np.unique(names_not_found))
         self.print('Faculty names not found: ')
         self.print(np.reshape(unique_unfound_names, (-1, 1)), '\n')
@@ -1103,9 +1141,15 @@ class match_maker():
             self.print('-- None --')
         self.print('')
         
+               
         # Assign object names
         self.student_names = student_names
         self.faculty_names = faculty_names
+        
+        # Print number of people interviewing
+        self.print('Number of students: ' + str(self.num_students))
+        self.print('Number of faculty: ' + str(self.num_faculty))
+        self.print('')
 
     '''
         Load track data
@@ -1323,7 +1367,7 @@ class match_maker():
                     model.Add(num_interviews_prof <= self.MAX_INTERVIEWS)
     
             # Define the maximization of the objective
-            self.print('Building Maximization term...')
+            self.print('Building Objective Function...')
             if self.EMPTY_PENALTY != 0:
                 model.Maximize(
                     sum(objective_matrix[i][s][p] * self.interview[(p, s, i)]
@@ -1394,8 +1438,9 @@ class match_maker():
             else:
                 self.print('-------- Solver failed! --------')
             
-            
-            self.print('-------- Matches Made! --------')
+            self.print('---------------------------------------------------------')
+            self.print('                     Matches Made!')
+            self.print('---------------------------------------------------------')
             
         self.is_running = True
     '''
@@ -1680,9 +1725,13 @@ class match_maker():
     def validate(self):
         
         self.is_validating = True
-        print('Errors will appear here:')
+        print('-----------------------------------------------------------------')
+        print('                     Validation Beginning')
+        print('                   Errors will appear here:')
         print('-----------------------------------------------------------------')
         self.main()
+        print('-----------------------------------------------------------------')
+        print('                      Validation Complete!')
         print('-----------------------------------------------------------------')
         self.is_validating = False
     
