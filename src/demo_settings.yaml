@@ -24,7 +24,7 @@ tb_fac_pref: faculty_preferences_rand.csv
 tb_fac_sched_dir: faculty_schedules
 tb_log_name: log.txt
 tb_match: matches
-tb_path: /media/veracrypt1/Users/Cale/Documents/Calers_Writing/PhD/GEC/scheduling_software/2020_data_randomized/processed_for_program
+tb_path: ../data
 tb_results_dir: results
 tb_stud_avail: student_availability.csv
 tb_stud_pref: student_preferences_rand.csv
