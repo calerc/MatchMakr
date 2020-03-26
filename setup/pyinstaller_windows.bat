@@ -1,1 +1,2 @@
-pyinstaller --onefile --noconsole --icon=MatchMAkr_Ico.ic MatchMakr.py
+pyinstaller --onefile --noconsole --icon=..\src\MatchMAkr_Ico.ico ..\src\MatchMakr.py
+
