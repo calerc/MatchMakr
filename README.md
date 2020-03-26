@@ -43,7 +43,7 @@ In addition to these files, MatchMakr can accept the following files:
 1. faculty_availability.csv - a matrix specifying the avilability of professors with ones and zeros
 2. student_availability.csv - a matrix specifying the avilability of students with ones and zeros
 
-Not that MatchMakr expects faculty_availability.csv when using the default settings, but not student_availability.csv
+Note that MatchMakr expects faculty_availability.csv when using the default settings, but not student_availability.csv.  The layout of the availability .csv files is important.  Examples of these files can be found in /data.
 
 ## Where to begin
 The GUI is defined in `MatchMakr.py`
