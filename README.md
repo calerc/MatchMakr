@@ -26,15 +26,17 @@ The bare minimum files that can be provided to MatchMakr are as follows:
 2. student_preferences.csv - a spreadsheet that contains information about:
     1. Last Name
     2. First Name
-    3. Track (a common interest)
-    4. Professors that the student wants to interview with (ordered list)
+    3. Full Name
+    4. Track (a common interest)
+    5. Professors that the student wants to interview with (ordered list)
 3. faculty_preferences.csv - a spreadsheet that contains information about faculty:
     1. Last Name
     2. First Name
-    3. Track (a common interest)
-    4. If the professor is available to interview
-    5.If the professor is recruiting (optional)
-    6. An ordered list of professors that a professor is like (ordered list, optional)
+    3. Full Name
+    4. Track (a common interest)
+    5. If the professor is available to interview
+    6.If the professor is recruiting (optional)
+    7. An ordered list of professors that a professor is like (ordered list, optional)
 4. Professors that the student wants to interview with (ordered list)
 
 In addition to these files, MatchMakr can accept the following files:
