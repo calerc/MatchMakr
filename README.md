@@ -4,7 +4,7 @@
 # MatchMakr
 
 ## Introduction
-MatchMakr is a program designed to match interviewers with interviewees.  Originally, it was designed for matching prospective graduate students with faculty.  So, the source code calls interviewees "students" and interviewers faculty.
+MatchMakr is a program designed to match interviewers with interviewees.  Originally, it was designed for matching prospective graduate students with faculty.  So, the source code calls interviewees "students" and interviewers "faculty."
 
 MatchMakr was built on top of Google OR-Tools
 
