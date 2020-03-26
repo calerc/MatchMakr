@@ -47,5 +47,6 @@ Not that MatchMakr expects faculty_availability.csv when using the default setti
 
 ## Where to begin
 The GUI is defined in `MatchMakr.py`
+
 The matchmaking backend is defined in `match_maker.py`
 
