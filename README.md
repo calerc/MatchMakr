@@ -37,7 +37,7 @@ The bare minimum files that can be provided to MatchMakr are as follows:
     5. If the professor is available to interview
     6.If the professor is recruiting (optional)
     7. An ordered list of professors that a professor is like (ordered list, optional)
-4. Professors that the student wants to interview with (ordered list)
+    8. Students that the professor wants to interview (ordered list)
 
 In addition to these files, MatchMakr can accept the following files:
 1. faculty_availability.csv - a matrix specifying the avilability of professors with ones and zeros
