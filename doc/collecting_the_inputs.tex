@@ -1,101 +1,313 @@
 \newcommand{\tabline}[4]{#1 & #2 & #3 & #4\\ \hline}
 \newcommand{\tabheader}[4]{\hline \textbf{#1} & \textbf{#2} & \textbf{#3} & \textbf{#4}\\ \hline \hline}
+\renewcommand{\arraystretch}{1.25}
+
+\newcommand{\pbtwo}[1]{\parbox[t]{3in}{#1}}
+\newcommand{\tabheadertwo}[2]{\hline \textbf{#1} & \textbf{#2} \\ \hline \hline}
+\newcommand{\tablinetwo}[2]{\pbtwo{#1} & \pbtwo{#2} \\ \hline}
+
+%\newcommand{\tabheaderthree}[3]{\hline \textbf{#1} & \textbf{#2} & \textbf{#3}\\ \hline \hline}
+%\newcommand{\tablinethree}[3]{#1 & #2 & #3\\ \hline}
+
+
 \newcommand{\cwidth}{1in}
 \newcommand{\notrecommended}{\parbox[t]{\cwidth}{\centering{Not \\Recommended}}}
-\newcommand{\pb}[1]{\parbox[t]{1.5in}{#1: \\}}
+\newcommand{\pb}[1]{\parbox[t]{1.5in}{#1 \\}}
+\newcommand{\olist}[1]{	$1^{st}$ #1 \\
+						$2^{nd}$ #1 \\
+						$3^{rd}$ #1 \\
+						$\vdots$ \\
+						$10^{th}$ #1 \\}
+						
+%\newcommand{\inlinecode}{\texttt}
+
+
 
 \chapter{Collecting Data from Students and Faculty}
 
 We will now discuss how to collect the input data for MatchMakr.
 
-\section{Necessary Data}
-The following table summarizes that data that we recommend collecting from students and faculty:
+\section{Data Fields}
+Table \ref{tab:user-data} summarizes that data that we recommend collecting from students and faculty:
 
-\begin{center}
+
+\begin{table}[!h]
+	\centering
 	\begin{tabular}{| l | c | c | p{2in}| }
+	
+		% Header
 		\tabheader{Data:}{Students:}{Faculty:}{Notes:}
+		
+		% Both
 		\tabline{Last name}{Required}{Required}{}
 		\tabline{First name}{Required}{Required}{}
-		\tabline{\pb{List of preferred \\ faculty interviewers}}{Required}{Not Applicable}{MatchMakr can handle both ordered (ranked) and unordered (unranked) preferences, but we recommend using ordered preferences}
-		\tabline{\pb{List of preferred \\ student interviewees}}{Not Applicable}{Required}{MatchMakr can handle both ordered (ranked) and unordered (unranked) preferences, but we recommend using ordered preferences}
-		\tabline{\pb{Are you available \\ to interview?}}{Not Applicable}{Required}{Yes/No}
-		\tabline{Are you recruiting?}{Not Applicable}{Recommended}{Yes/No/Maybe.  Faculty commonly don't know if they're recruiting until they hear about the status of their grants}
+		\tabline{\pb{List of preferred \\ faculty interviewers}}{Required}{Not Applicable}{Ordered (ranked) List}
+		\tabline{\pb{List of preferred \\ student interviewees}}{Not Applicable}{Required}{Ordered (ranked) List}
 		\tabline{Track}{Recommended}{Recommended}{A ``track'' is just a common interest}
+		
+		% Faculty
+		\tabline{\pb{Are you available \\ to interview?}}{Not Applicable}{Required}{Yes/No}	
+		\tabline{List of similar faculty}{Not Applicable}{Recommended}{Ordered (ranked) list }	
+		\tabline{Are you recruiting?}{Not Applicable}{Recommended}{Yes/No/Maybe.  Faculty commonly don't know if they're recruiting until they hear about the status of their grants}
+		
+		
+		% Not Recommended
 		\tabline{\pb{Are you willing to \\interview during lunch?}}{\notrecommended}{\notrecommended}{Only collect this data if there will be a large break during the interviews, and if interviews during that period are optional for the faculty}
 	\end{tabular}
-\end{center}
+	\caption{\label{tab:user-data} List of data to be collected from students and faculty}
+\end{table}
 
-\subsection{Necessary data from students}
-MatchMakr requires the following data is from students:
+Inputs listed as ``Required'' are needed by MatchMakr to perform the matchmaking.  Inputs listed as ``Recommended'' help MatchMakr make better matches when obviously good matches are not available.  For instance, suppose that MatchMakr cannot assign a student, Bob, an interview with a faculty member, Susan, that Bob requested to meet.  Who is the best substitute?
+
+One solution to this problem is to use ``Tracks.''  Tracks are just common interests.  MatchMakr can recognize when students and faculty have a common interest, and match them.  So, if Bob specifies that he is interested in Neural Engineering, and faculty member, Bill, also specifies that he is interested in Neural Engineering, then MatchMakr can match Bob with Bill.  This happens even though Bob did not request Bill, and Bill did not request Bob.
+
+We can also ask faculty to provide us with a list of similar faculty.  Then, if Susan indicates that another faculty member, Mary, has similar research interests, MatchMakr can assign Bob an interview with Mary if it can't assign Bob an interview with Susan.
+
+Also, we can ask if faculty are recruiting, and then give faculty that have open positions priority when assigning interviews.
+
+
+
+\section{Collecting the Data with Google Forms}
+
+We recommend using Google Forms to collect the data.  Example forms can be found on the MatchMakr \href{https://sites.google.com/case.edu/matchmakr/home}{website} under the section ``Experience an example survey.''  Survey examples are provided for both the faculty and the students. Google Forms can be found at \url{forms.google.com}.  To create a new form, click on: \par ``Start a new form $\rightarrow$ Blank.''
+
+\begin{figure}[!h]
+	\includegraphics[scale=\scalefactor]{blank_form.png}
+	\caption{\label{fig:blank-form} Creating a blank Google Form}
+\end{figure}
+
+
+
+% ------------------------------------------------
+%
+% Required question names
+%
+% ------------------------------------------------
+\subsection{Required Data Field Naming}
+Data collected from students and faculty must be in a .csv file, which can be opened and edited using any spreadsheet program.  The most common spreadsheet program is Microsoft Excel.  MatchMakr relies on the column headers to determine where the data is at in the .csv file.  Thus, the data headers must follow established patterns in order to be recognized by MatchMakr.  The data collected from Google Forms can be downloaded as a .csv file.  The names of the questions in the Google Form become the column headers.  Thus, the names of the questions must follow the established patterns detailed in Table \ref{tab:data-names}.  Note that it is not necessary to collect every data field listed in Table \ref{tab:data-names}.  Please refer to Table \ref{tab:user-data} to determine what data we recommend collecting.
+
+
+\begin{table}
+	\centering
+	\begin{tabular}{| l | l| }
+	
+		% Header
+		\tabheadertwo{Question:}{Required Title:}
+		
+		% Both
+		\tablinetwo{Last name}{Last name}
+		\tablinetwo{First name}{First name}
+		\tablinetwo{List of preferred student interviewers}{\olist{Choice Student}} 
+		\tablinetwo{List of preferred faculty interviewers}{\olist{Preference for Faculty Interviewer}}
+		\tablinetwo{Track}{Track}		
+		
+		% Faculty
+		\tablinetwo{Are you available to interview?}{Are you available to interview students?}
+		\tablinetwo{List of similar faculty}{\olist{Most Similar Faculty Member}}
+		\tablinetwo{Are you recruiting?}{Are you recruiting this year?}
+		
+		
+		
+		\tablinetwo{Are you willing to interview during lunch?}{Are you willing to \\have a working lunch?}
+		
+	\end{tabular}
+	\caption{\label{tab:data-names} Required question titles}
+\end{table}
+
+Suppose that you want to rename a question.  Is this possible?  Yes, but it requires a little work.  When you make the surveys, the question titles can be whatever you want.  However, when you download the data, you must change the name back to the required name.  For instance, for clarity, you might want to change the question title ``Track'' to ``Common Interests''.  In the Google Form, you can make the title of the question ``Common Interests,'' but when you download the .csv survey summary, you must change the column heading from ``Common Interests'' back to ``Track.''
+
+% ------------------------------------------------
+%
+% Anatomy of a Google Survey
+%
+% ------------------------------------------------
+\begin{figure}
+	\centering
+	\includegraphics[scale=\scalefactor]{google_form.png}
+	\caption{\label{fig:google-form} The anatomy of a Google Form}
+\end{figure}
+
+\begin{figure}
+\centering
+	\includegraphics[scale=\scalefactorzoomin]{google_question.png}
+	\caption{\label{fig:google-question} The anatomy of a Google Form Question}
+\end{figure}
+
+
+\subsection{Creating a Survey with Google Forms}
+Figures \ref{fig:google-form} and \ref{fig:google-question} show the anatomy of a Google Form and a Google Form Question.  Please refer to those figures for commands.
+
+
+% ------------------------------------------------
+%
+% Student Survey Steps
+%
+% ------------------------------------------------
+\subsubsection{Student Survey}
+
+We will demonstrate how to create a Google form.  These instructions assume that you have already created a blank form, as detailed above.  Here, we will collected the recommended information
+
+The steps to creating a student survey are as follows:
 \begin{enumerate}
-	\itemsep0em
-	\item Last Name
-	\item First Name
-	\item List of preferred faculty to interview with
-	\begin{itemize}
-	\itemsep0em
-		\item MatchMakr can handle both ordered (ranked) and unordered (unranked) preferences
-		\item We recommend using an ordered (ranked) list
-	\end{itemize}
+
+	% Introduction
+	\item Title your form in the \texttt{Form Name} box. We suggest the name ``student\_preferences''
+	\item Give the section a title in the \texttt{Section Title} box
+	\item Provide a description for the survey in the \texttt{Section Description} box.
+			We suggest notifying people that the results of these survey will be used for matchmaking
+	\item Turn on ``Collect email addresses''.  Go to \texttt{Settings} $\rightarrow$ \texttt{Preferences} and click on \texttt{Collect email addresses}
+	\item By default, Google Forms creates a question.  Delete that question using the \texttt{Delete} button
+	
+	% Basic Information
+	\item Create a new section by clicking the \texttt{Add Section} button
+	\item Title the section.  We recommend ``Basic Information about Yourself''
+	\item Provide a description for the section (optional)
+	\item Create the questions defined in Table \ref{tab:student-questions}.  Questions can be created by clicking the \texttt{Add Question} button
+		\begin{enumerate}
+			\item Make the \texttt{Question Title} be the same as the entries in Column 1
+			\item Make the \texttt{Question Type} be the same as the entries in Column 2
+			\item Put the answers from Column 3 into the \texttt{Response Box}
+			\item If a description is provided in Column 4, then put that into the \texttt{Description} Box. A description box can be created by going to \texttt{Question Options} $\rightarrow$ \texttt{Description}			
+		\end{enumerate}
+		
+	% ------------------------------------------------
+	%
+	% Student Survey Questions
+	%
+	% ------------------------------------------------
+	\begin{table}[h!]
+		\centering
+		\begin{tabular}{| l | l | l | p{2in} |}
+		
+			% Header
+			\tabheader{Question:}{Type:}{Responses:}{Description:}
+			
+			% Questions
+			\tabline{Last name}{Short Answer}{\texttt{(Leave Empty)}}{N/A}
+			\tabline{First name}{Short Answer}{\texttt{(Leave Empty)}}{N/A}
+			\tabline{Track}{Multiple Choice}{List of possible tracks}{Please indicate which track is most inline with your interests}	
+			
+		\end{tabular}
+		\caption{\label{tab:student-questions} Questions for Google Student Form}
+	\end{table}	
+	
+	% Faculty Preferences
+	\item Create a new section by clicking the \texttt{Add Section} button
+	\item Title the section.  We recommend ``Interview Preferences''
+	\item Provide a description for the section.  We recommend communicating that students should rank professors in order of preference
+	\item Choose the number of faculty that students should be able to select ($\le 10$)
+	\item For each faculty member that a student can choose, do the following:
+		\begin{enumerate}
+			\item Create a new question. Questions can be created by clicking the \texttt{Add Question} button
+			\item Title the question ``$n^{xx}$ Preference for Faculty Interviewer'', where $n$ is the question number, and $xx$ is the number suffix
+				\begin{itemize}
+					\item For instance, for the first faculty member, $n=1$ and $xx=$st, so the question is\\ ``$1^{st}$ Preference for Faculty Interviewer''
+				\end{itemize}
+			\item Make the question type Dropdown using the \texttt{Question Type} box
+			\item Copy the list of faculty, and paste the list into the \texttt{Response Box}
+				\begin{itemize}
+					\item If you have a list of faculty as a column of plain text, you can paste all names at once
+				\end{itemize}
+		\end{enumerate}
+
 \end{enumerate}
 
-\subsection{Necessary data from faculty}
-MatchMakr requires the following data is from faculty:
+
+
+% ------------------------------------------------
+%
+% Faculty Survey Steps
+%
+% ------------------------------------------------
+\subsubsection{Faculty Survey}
+
+The steps to creating a faculty survey are as follows:
 \begin{enumerate}
-	\itemsep0em
-	\item Last Name
-	\item First Name
-	\item List of preferred students to interview with
-	\begin{itemize}
-		\itemsep0em
-		\item MatchMakr can handle both ordered (ranked) and unordered (unranked) preferences
-		\item We recommend using an ordered (ranked) list
-	\end{itemize}
-	\item Availability to interview
-	\begin{itemize}
-		\itemsep0em
-		\item Yes/No answer
-	\end{itemize}
+	\item Title your form in the \texttt{Form Name} box. We suggest the name ``faculty\_preferences''
+	\item Give the section a title in the \texttt{Section Title} box
+	\item Provide a description for the survey in the \texttt{Section Description} box.
+			We suggest notifying people that the results of these survey will be used for matchmaking
+	\item Turn on ``Collect email addresses''.  Go to \texttt{Settings} $\rightarrow$ \texttt{Preferences} and click on \texttt{Collect email addresses}
+	\item By default, Google Forms creates a question.  Delete that question using the \texttt{Delete} button
+	
+	% Basic Information
+	\item Create a new section by clicking the \texttt{Add Section} button
+	\item Title the section.  We recommend ``Basic Information about Yourself''
+	\item Provide a description for the section (optional)
+	\item Create the questions defined in Table \ref{tab:faculty-questions}.  Questions can be created by clicking the \texttt{Add Question} button
+		\begin{enumerate}
+			\item Make the \texttt{Question Title} be the same as the entries in Column 1
+			\item Make the \texttt{Question Type} be the same as the entries in Column 2
+			\item Put the answers from Column 3 into the \texttt{Response Box}
+			\item If a description is provided in Column 4, then put that into the \texttt{Description} Box. A description box can be created by going to \texttt{Question Options} $\rightarrow$ \texttt{Description}			
+		\end{enumerate}
+		
+	% ------------------------------------------------
+	%
+	% Faculty Survey Questions
+	%
+	% ------------------------------------------------
+	\begin{table}
+		\centering
+		\begin{tabular}{| l | l | l | p{2in} |}
+		
+			% Header
+			\tabheader{Question:}{Type:}{Responses:}{Description:}
+			
+			% Questions
+			\tabline{Last name}{Short Answer}{\texttt{(Leave Empty)}}{N/A}
+			\tabline{First name}{Short Answer}{\texttt{(Leave Empty)}}{N/A}
+			\tabline{Are you available to interview students?}{Multiple Choice}{Yes/No}{N/A}
+			\tabline{Track}{Multiple Choice}{List of possible tracks}{Please indicate which track is most inline with your interests}
+			\tabline{Are you recruiting this year?}{Multiple Choice}{Yes/No/Maybe}{N/A}
+			
+		\end{tabular}
+		\caption{\label{tab:faculty-questions} Questions for Google Faculty Form}
+	\end{table}
+	
+	% Faculty Similarity
+	\item Create a new section by clicking the \texttt{Add Section} button
+	\item Title the section.  We recommend ``Faculty Similarity''
+	\item Provide a description for the section.  We recommend communicating that faculty similarity improves matchmaking by helping students discover junior faculty, and also by helping provide matches when scheduling conflicts occur
+	\item Choose the number of similar faculty that each faculty member should be able to select ($\le 10$)
+	\item For each faculty member that a student can choose, do the following:
+		\begin{enumerate}
+			\item Create a new question. Questions can be created by clicking the \texttt{Add Question} button
+			\item Title the question ``$n^{xx}$ Most Similar Faculty Member'', where $n$ is the question number, and $xx$ is the number suffix
+				\begin{itemize}
+					\item For instance, for the first faculty member, $n=1$ and $xx=$st, so the question is\\ ``$1^{st}$ Most Similar Faculty Member''
+				\end{itemize}
+			\item Make the question type Dropdown using the \texttt{Question Type} box
+			\item Copy the list of faculty, and paste the list into the \texttt{Response Box}
+				\begin{itemize}
+					\item If you have a list of faculty as a column of plain text, you can paste all names at once
+				\end{itemize}
+		\end{enumerate}
+		
+		
+	% Student Preferences
+	\item Create a new section by clicking the \texttt{Add Section} button
+	\item Title the section.  We recommend ``Interview Preferences''
+	\item Provide a description for the section.  We recommend communicating that students should rank professors in order of preference
+	\item Choose the number of students that each faculty member should be able to select ($\le 10$)
+	\item For each faculty member that a student can choose, do the following:
+		\begin{enumerate}
+			\item Create a new question. Questions can be created by clicking the \texttt{Add Question} button
+			\item Title the question ``$n^{xx}$ Choice Student'', where $n$ is the question number, and $xx$ is the number suffix
+				\begin{itemize}
+					\item For instance, for the first faculty member, $n=1$ and $xx=$st, so the question is\\ ``$1^{st}$ Choice Student''
+				\end{itemize}
+			\item Make the question type Dropdown using the \texttt{Question Type} box
+			\item Copy the list of faculty, and paste the list into the \texttt{Response Box}
+				\begin{itemize}
+					\item If you have a list of faculty as a column of plain text, you can paste all names at once
+				\end{itemize}
+		\end{enumerate}
+
 \end{enumerate}
 
-\subsection{Recommended data from students}
-We recommend supplying MatchMakr with the following data for students:
-\begin{enumerate}
-	\itemsep0em
-	\item Track (common interest that can be used to group similar people)
-\end{enumerate}
 
-\subsection{Recommended data from faculty}
-The following data is needed from faculty:
-\begin{enumerate}
-	\itemsep0em
-	\item Track (common interest that can be used to group similar people)
-	\item Are you recruiting?
-		\begin{itemize}
-			\itemsep0em
-			\item Yes/No/Maybe
-			\item Note that some faculty may not know if they are recruiting until they receive grant notifications of award
-		\end{itemize}
-	\item Ordered list of similar faculty
-\end{enumerate}
 
-\subsection{Additional non-standard data from students}
-MatchMakr cannot accept additional inputs from students
 
-\subsection{Additional non-standard data from faculty}
-MatchMakr can accept the following data from faculty, but it is not recommended:
-\begin{enumerate}
-	\itemsep0em
-	\item Are you willing to work during lunch?
-		\begin{itemize}
-			\itemsep0em
-			\item Yes/No/Maybe
-			\item Only use this option under the following conditions:
-				\begin{enumerate}
-					\itemsep0em
-					\item There is a break in the schedule to, for instance, accommodate a meal
-					\item Working during this break is optional for all people
-				\end{enumerate}
-		\end{itemize}
-\end{enumerate}
+
 
