@@ -1,0 +1,101 @@
+\newcommand{\tabline}[4]{#1 & #2 & #3 & #4\\ \hline}
+\newcommand{\tabheader}[4]{\hline \textbf{#1} & \textbf{#2} & \textbf{#3} & \textbf{#4}\\ \hline \hline}
+\newcommand{\cwidth}{1in}
+\newcommand{\notrecommended}{\parbox[t]{\cwidth}{\centering{Not \\Recommended}}}
+\newcommand{\pb}[1]{\parbox[t]{1.5in}{#1: \\}}
+
+\chapter{Collecting Data from Students and Faculty}
+
+We will now discuss how to collect the input data for MatchMakr.
+
+\section{Necessary Data}
+The following table summarizes that data that we recommend collecting from students and faculty:
+
+\begin{center}
+	\begin{tabular}{| l | c | c | p{2in}| }
+		\tabheader{Data:}{Students:}{Faculty:}{Notes:}
+		\tabline{Last name}{Required}{Required}{}
+		\tabline{First name}{Required}{Required}{}
+		\tabline{\pb{List of preferred \\ faculty interviewers}}{Required}{Not Applicable}{MatchMakr can handle both ordered (ranked) and unordered (unranked) preferences, but we recommend using ordered preferences}
+		\tabline{\pb{List of preferred \\ student interviewees}}{Not Applicable}{Required}{MatchMakr can handle both ordered (ranked) and unordered (unranked) preferences, but we recommend using ordered preferences}
+		\tabline{\pb{Are you available \\ to interview?}}{Not Applicable}{Required}{Yes/No}
+		\tabline{Are you recruiting?}{Not Applicable}{Recommended}{Yes/No/Maybe.  Faculty commonly don't know if they're recruiting until they hear about the status of their grants}
+		\tabline{Track}{Recommended}{Recommended}{A ``track'' is just a common interest}
+		\tabline{\pb{Are you willing to \\interview during lunch?}}{\notrecommended}{\notrecommended}{Only collect this data if there will be a large break during the interviews, and if interviews during that period are optional for the faculty}
+	\end{tabular}
+\end{center}
+
+\subsection{Necessary data from students}
+MatchMakr requires the following data is from students:
+\begin{enumerate}
+	\itemsep0em
+	\item Last Name
+	\item First Name
+	\item List of preferred faculty to interview with
+	\begin{itemize}
+	\itemsep0em
+		\item MatchMakr can handle both ordered (ranked) and unordered (unranked) preferences
+		\item We recommend using an ordered (ranked) list
+	\end{itemize}
+\end{enumerate}
+
+\subsection{Necessary data from faculty}
+MatchMakr requires the following data is from faculty:
+\begin{enumerate}
+	\itemsep0em
+	\item Last Name
+	\item First Name
+	\item List of preferred students to interview with
+	\begin{itemize}
+		\itemsep0em
+		\item MatchMakr can handle both ordered (ranked) and unordered (unranked) preferences
+		\item We recommend using an ordered (ranked) list
+	\end{itemize}
+	\item Availability to interview
+	\begin{itemize}
+		\itemsep0em
+		\item Yes/No answer
+	\end{itemize}
+\end{enumerate}
+
+\subsection{Recommended data from students}
+We recommend supplying MatchMakr with the following data for students:
+\begin{enumerate}
+	\itemsep0em
+	\item Track (common interest that can be used to group similar people)
+\end{enumerate}
+
+\subsection{Recommended data from faculty}
+The following data is needed from faculty:
+\begin{enumerate}
+	\itemsep0em
+	\item Track (common interest that can be used to group similar people)
+	\item Are you recruiting?
+		\begin{itemize}
+			\itemsep0em
+			\item Yes/No/Maybe
+			\item Note that some faculty may not know if they are recruiting until they receive grant notifications of award
+		\end{itemize}
+	\item Ordered list of similar faculty
+\end{enumerate}
+
+\subsection{Additional non-standard data from students}
+MatchMakr cannot accept additional inputs from students
+
+\subsection{Additional non-standard data from faculty}
+MatchMakr can accept the following data from faculty, but it is not recommended:
+\begin{enumerate}
+	\itemsep0em
+	\item Are you willing to work during lunch?
+		\begin{itemize}
+			\itemsep0em
+			\item Yes/No/Maybe
+			\item Only use this option under the following conditions:
+				\begin{enumerate}
+					\itemsep0em
+					\item There is a break in the schedule to, for instance, accommodate a meal
+					\item Working during this break is optional for all people
+				\end{enumerate}
+		\end{itemize}
+\end{enumerate}
+
