@@ -1,1 +1,39 @@
 \chapter{Settings}
+\renewcommand{\arraystretch}{2}
+
+Directions:
+To change the file path, you can double click on the text box to open up a file dialog.
+
+\begin{figure}
+	\centering
+	\includegraphics[scale=\scalefactor]{settings.png}
+	\caption{\label{fig:settings} MatchMakr Settings}
+\end{figure}
+
+
+\begin{table}[h!]
+	\centering
+	\begin{tabular}[t]{| p{2in} | p{2.1in} | p{2.5in} |}
+	
+		% Header
+		\tabheaderthree{Setting:}{Possible Values:}{Description:}
+		
+		% Questions
+		\tablinethree{Path}{Any valid file path}{Folder where all of the files are stored}	
+		\tablinethree{Student Preferences}{Any valid \texttt{.csv} file name}{}	
+		\tablinethree{Faculty Preferences}{Any valid \texttt{.csv} file name}{}
+		\tablinethree{Student Availability}{Any valid \texttt{.csv} file name}{}
+		\tablinethree{Faculty Availability}{Any valid \texttt{.csv} file name}{}	
+		\tablinethree{Results Folder}{Any valid folder name}{}	
+		\tablinethree{Student Schedules Folder Name}{Any valid folder name}{}	
+		\tablinethree{Faculty Schedules Folder Name}{Any valid folder name}{}	
+		\tablinethree{Number of Interview}{0 - 99}{}	
+		\tablinethree{Minimum Number of Interviews}{0 - (Number of Interviews)}{}	
+		\tablinethree{Maximum Number of Interviews}{\pbthreelarge{(Minimum Number of Interviews) \\- (Number of Interviews)}}{}		
+		\tablinethree{Recommend Extra Matches}{0 - 99}{}
+		\tablinethree{Faculty Advantage Factor}{0 - 100}{}				
+		
+		
+	\end{tabular}
+	\caption{\label{tab:settings} MatchMakr Settings}
+\end{table}	

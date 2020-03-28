@@ -1,9 +1,7 @@
 \documentclass[oneside]{book}
-%\usepackage{pgfplotstable}
 
 \usepackage[a4paper, total={7in, 10in}]{geometry}
-%\usepackage{fontspec}
-%setmainfont[Ligatures=TeX]{Arial}
+
 \usepackage{graphicx}
 \usepackage{float}
 
@@ -17,8 +15,20 @@
 \newcommand{\scalefactor}{0.4}
 \newcommand{\scalefactorzoomin}{0.5}
 \newcommand{\website}{https://sites.google.com/case.edu/matchmakr/home}
-%\usepackage{tabto}
-%\usepackage{makecell}
+
+
+\newcommand{\tabline}[4]{#1 & #2 & #3 & #4\\ \hline}
+\newcommand{\tabheader}[4]{\hline \textbf{#1} & \textbf{#2} & \textbf{#3} & \textbf{#4}\\ \hline \hline}
+\renewcommand{\arraystretch}{1.25}
+
+\newcommand{\pbtwo}[1]{\parbox[t]{3in}{#1}}
+\newcommand{\tabheadertwo}[2]{\hline \textbf{#1} & \textbf{#2} \\ \hline \hline}
+\newcommand{\tablinetwo}[2]{\pbtwo{#1} & \pbtwo{#2} \\ \hline}
+
+\newcommand{\pbthree}[1]{\parbox[t]{2in}{#1}}
+\newcommand{\pbthreelarge}[1]{\parbox[t]{2.1in}{#1}}
+\newcommand{\tabheaderthree}[3]{\hline \textbf{#1} & \textbf{#2} & \textbf{#3}\\ \hline \hline}
+\newcommand{\tablinethree}[3]{\raggedleft{#1} & #2 & #3  \\ \hline}
 
 
 
