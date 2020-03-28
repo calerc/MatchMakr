@@ -299,7 +299,7 @@ class AdvancedSettingsFrame(SettingsFrame):
         self.set_min_max_def(self.sb_fac_sim_weight, 0, 9999999, 30000)
         self.set_min_max_def(self.sb_num_sim_fac, 0, 99, 5)
         self.set_min_max_def(self.sb_num_pref_2_check, 0, 99, 5)
-        self.set_min_max_def(self.sb_check_freq, 0, 10000, 100)
+        self.set_min_max_def(self.sb_check_freq, 1, 10000, 100)
         self.set_min_max_def(self.sb_empty_penalty, 0, 9999999, 0)
        
 class RunFrame(QFrame):
