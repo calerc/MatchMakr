@@ -1,0 +1,81 @@
+\chapter{Processing Preference Data}
+
+The Google Form puts most of the data in the correct format.  However, we must do a little bit of preprocessing before we feed the data into MatchMaker.  If we miss a step, it's okay.  MatchMakr can catch most errors and fix them automatically.
+
+Example files can be found on the MatchMaker \href{\website}{website}
+
+The following steps should be performed on both the faculty and student preference data:
+\begin{enumerate}
+	\item Open the preference data in any spreadsheet program (the most common is Microsoft Excel)
+	\item Because the file is a \texttt{.csv}, you will have to import it when the import box pops up
+		\begin{itemize}
+			\item Select the following separators
+				\begin{enumerate}
+					\item comma (,)
+					\item other, and then type in brackets([])
+				\end{enumerate}
+			\item Leave the rest of the settings as their defaults
+		\end{itemize}
+	\item To prevent data import in the future, save the preference files as \texttt{.xlsx}
+		\begin{itemize}
+			\item \textbf{ Whenever saving changes, first save the changes to the .xlsx file, then do \texttt{File} $\rightarrow$ \texttt{Save a copy} and save as a \texttt{.csv} file.}  MatchMakr cannot read \texttt{.xlsx} files.  It can only read \texttt{.csv} files.
+		\end{itemize}
+	\item If you did not use the expected MatchMakr question titles when making the survey, replace your titles with the expected MatchMakr titles
+		\begin{itemize}
+			\item Example: If you replaced ``Track'' with ``Common Interest'' when creating questions for the survey, now change ``Common Interest'' back to ``Track''
+		\end{itemize}
+	\item Insert a new column to the right of the ``Last Name'' column
+	\item Title the new column ``Full Name''
+	\item Concatenate the last names and first names:
+		\begin{itemize}
+			\item Assuming the last name data is in column C
+			\item Assuming the first name data is in column D
+			\item Assume that the preference data starts in row 2
+			\item The formula for cell E2 should be: \texttt{=concatenate(C2, D2)}
+			\item Drag this formula down to fill the rest of the column
+		\end{itemize}
+	\item To the bottom of the spreadsheet, add the names of anyone who did not fill out the survey
+		\begin{itemize}
+			\item If you don't have a list of people who didn't fill out the survey, MatchMakr can detect this in many circumstances.  See the chapter on Validating Settings and Running MatchMakr
+			\item If you know any information about missing names, add it to the spreadsheet (e.g., faculty tracks)
+		\end{itemize}
+	\item Check the names for common mistakes and fix them
+		\begin{itemize}
+			\item Reversing first and last name
+			\item Using a nickname or preferred name
+			\item Using more names (hyphenated last names, middle name, etc...) then given in the original application
+			\item MatchMakr can detect mistakes in many cases.  See the chapter on Validating Settings and Running MatchMakr
+		\end{itemize}
+	\item Alphabetize the list
+		\begin{itemize}
+			\item Go to \texttt{Data} $\rightarrow$ \texttt{Sort}
+			\item Select \texttt{My data has column headers}
+			\item Sort by:
+				\begin{enumerate}
+					\item Full Name
+					\item Timestamp
+				\end{enumerate}
+		\end{itemize}
+	\item Remove duplicate entries
+	\item Remove all instances of names of people who are no longer attending
+		\begin{itemize}
+			\item Remove survey results (rows) from these people
+			\item Remove the names of these people anywhere they appear in \textbf{BOTH} preference spreadsheets
+			\item If the names appear in ranked lists, move lower-ranked entries up to fill the space
+				\begin{itemize}
+					\item As example, if a person who canceled was someone's ninth choice, replace the name of the cancel-ee with the tenth choice
+				\end{itemize}
+		\end{itemize}
+			
+	
+			
+			
+\end{enumerate}
+
+
+\begin{figure}
+	\centering
+	\includegraphics[scale=\scalefactor]{example_preference_data.png}
+	\caption{\label{fig:example_preference_data} Example of processed preference data}
+\end{figure}
+
