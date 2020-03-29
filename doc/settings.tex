@@ -1,39 +1,93 @@
 \chapter{Settings}
-\renewcommand{\arraystretch}{2}
+\renewcommand{\arraystretch}{1}
 
-Directions:
-To change the file path, you can double click on the text box to open up a file dialog.
+Please refer to Figure \ref{fig:settings} for a visual representation of the settings.  A description of all settings is given in Table \ref{tab:settings}.  A description of all button functions is provided in Table \ref{tab:settings_buttons}.
 
-\begin{figure}
+
+% ------------------------------------------------
+%
+% Figure
+%
+% ------------------------------------------------
+\begin{figure}[h!]
 	\centering
 	\includegraphics[scale=\scalefactor]{settings.png}
 	\caption{\label{fig:settings} MatchMakr Settings}
 \end{figure}
 
-
+% ------------------------------------------------
+%
+% Parameter Descriptions
+%
+% ------------------------------------------------
 \begin{table}[h!]
 	\centering
 	\begin{tabular}[t]{| p{2in} | p{2.1in} | p{2.5in} |}
 	
 		% Header
-		\tabheaderthree{Setting:}{Possible Values:}{Description:}
+		\tabheaderthree{Setting:}{Possible Values (min - max):}{Description:}
 		
 		% Questions
-		\tablinethree{Path}{Any valid file path}{Folder where all of the files are stored}	
-		\tablinethree{Student Preferences}{Any valid \texttt{.csv} file name}{}	
-		\tablinethree{Faculty Preferences}{Any valid \texttt{.csv} file name}{}
-		\tablinethree{Student Availability}{Any valid \texttt{.csv} file name}{}
-		\tablinethree{Faculty Availability}{Any valid \texttt{.csv} file name}{}	
-		\tablinethree{Results Folder}{Any valid folder name}{}	
-		\tablinethree{Student Schedules Folder Name}{Any valid folder name}{}	
-		\tablinethree{Faculty Schedules Folder Name}{Any valid folder name}{}	
-		\tablinethree{Number of Interview}{0 - 99}{}	
-		\tablinethree{Minimum Number of Interviews}{0 - (Number of Interviews)}{}	
-		\tablinethree{Maximum Number of Interviews}{\pbthreelarge{(Minimum Number of Interviews) \\- (Number of Interviews)}}{}		
-		\tablinethree{Recommend Extra Matches}{0 - 99}{}
-		\tablinethree{Faculty Advantage Factor}{0 - 100}{}				
+		\tablinethree{Path}{Any valid file path}
+						{Folder where all of the files are stored.  This value can be changed by double-clicking this box, which will open a \texttt{File Open Dialog} box}	
+		\tablinethree{Student Preferences}{Any valid \texttt{.csv} file name}
+						{The name of the \texttt{.csv} file where the student preference data is
+							stored.  By default, it is \texttt{student\_preferences.csv}.  This file should be found in the folder specified above in \texttt{Path}}	
+		\tablinethree{Faculty Preferences}{Any valid \texttt{.csv} file name}
+						{The name of the \texttt{.csv} file where the faculty preference data is
+							stored.  By default, it is \texttt{faculty\_preferences.csv}.  This file should be found in the folder specified above in \texttt{Path}}
+		\tablinethree{Student Availability}{Any valid \texttt{.csv} file name}
+						{The name of the \texttt{.csv} file where the student availability data is
+							stored.  By default, it is \texttt{student\_availability.csv}.  This file should be found in the folder specified above in \texttt{Path}.  If this file is not required, MatchMakr can be told not to look for it.  See Advanced Settings}
+		\tablinethree{Faculty Availability}{Any valid \texttt{.csv} file name}
+						{The name of the \texttt{.csv} file where the faculty availability data is
+							stored.  By default, it is \texttt{faculty\_availability.csv}.  This file should be found in the folder specified above in \texttt{Path}.  If this file is not required, MatchMakr can be told not to look for it.  See Advanced Settings}	
+		\tablinethree{Results Folder}{Any valid folder name}
+						{The folder where the results will be output.  This is a subfolder of \texttt{Path} (specified above).}	
+		\tablinethree{Student Schedules Folder Name}{Any valid folder name}
+						{The folder where the student schedule \texttt{.pdf} files will be output.  This is a subfolder of \texttt{Results} (specified above)}	
+		\tablinethree{Faculty Schedules Folder Name}{Any valid folder name}
+						{he folder where the faculty schedule \texttt{.pdf} files will be output.  This is a subfolder of \texttt{Results} (specified above)}		
+		\tablinethree{Number of Interview}{0 - 99}
+						{The number of interview slots that are available.}		
+		\tablinethree{Minimum Number of Interviews}{0 - (Number of Interviews)}
+						{The minimum number of interview slots that someone can be scheduled for.  If someone is available for fewer interview slots than \texttt{Minimum Number of Interviews}, then the person will be assigned the number of interviews that they are available for.}		
+		\tablinethree{Maximum Number of Interviews}
+						{\pbthreelarge{(Minimum Number of Interviews) \\- (Number of Interviews)}}
+						{The maximum number of interview slots that someone can be scheduled for}	
+		\tablinethree{Recommend Extra Matches}{0 - 99}
+						{Number of extra matches to recommend.  This helps people find good matches that could not be scheduled and explore those matches outside of scheduled time.}	
+		\tablinethree{Faculty Advantage Factor}{0 - 100}
+						{A value of 50 weights student and faculty preferences equally.  A value of 100 causes MatchMakr to only consider faculty preferences and not consider student preferences.  A value of 0 causes MatchMakr to only consider student preferences and not consider faculty preferences. Changing this parameter can improve matches}					
 		
 		
 	\end{tabular}
 	\caption{\label{tab:settings} MatchMakr Settings}
 \end{table}	
+
+
+% ------------------------------------------------
+%
+% Button Descriptions
+%
+% ------------------------------------------------
+\newcommand{\buttontable}
+	{
+		\begin{table}[h!]
+			\centering
+			\begin{tabular}[t]{| p{2in} | p{2.1in} |}
+			
+				% Header
+				\hline \textbf{Button:} & \textbf{Function:} \\ \hline \hline
+				
+				% Questions
+				Load Settings & Load settings from a \texttt{.yaml} file.  This saves both basic and advanced settings \\ \hline
+				Save Settings & Save settings to a \texttt{.yaml} file.  This loads both basic and advanced settings \\ \hline				
+				
+				
+			\end{tabular}
+			\caption{\label{tab:settings_buttons} Functions of MatchMakr settings buttons}
+		\end{table}	
+	}
+	
+\buttontable

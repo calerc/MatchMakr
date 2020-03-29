@@ -1,7 +1,209 @@
-\chapter{Validating Settings and Running MatchMakr}
+\renewcommand{\pb}[1]{\parbox[t]{0.3\textwidth}{#1}}
+\renewcommand{\tabline}[3]{#1 & #2 & #3\\ \hline}
+\renewcommand{\multientry}[2]{& #1  & #2 \\ \cline{2-3} }
+\renewcommand{\multiending}[2]{& #1 & #2  \\ \hline}
 
-\section{Validating}
+\chapter{Run}
 
-\section{Running}
+\section{Button Functions}
+Table \ref{tab:runbuttons} lists the functions of the buttons on the MatchMakr Run screen.
+
+\begin{table}[h!]
+	\centering
+	\begin{tabular}{| r | l|}
+		\hline
+		\textbf{Name:} & \textbf{Function:} \\ \hline \hline
+		
+		Validate & Validates that the settings are valid \\ \hline
+		Run & Run the matchmaking process \\ \hline
+		Interrupt & Interrupt the matchmaking process \\ \hline
+		Clear Output & Clear the output from the screen so that new output is easier to see \\ \hline
+		Remove Results & Delete the results folder, as defined in \texttt{Settings} $\rightarrow$ 
+							\texttt{Results} \\ \hline
+		
+	\end{tabular}
+	\caption{\label{tab:runbuttons} Summary of buttons on MatchMakers Run screen}
+\end{table}
+
+Running MatchMakr automatically calls the validation routine.  But, it is more difficult to read the input produced by Run.  Thus, the recommend workflow is:
+
+Validate: \par
+\texttt{Validate} $\rightarrow$ Analyze Output $\rightarrow$ \texttt{Clear Output} $\rightarrow$ change settings \& re-validate (if necessary) $\rightarrow$ \texttt{Clear Output}
+
+Run: \par
+\texttt{Run} $\rightarrow$ \texttt{Interrupt} (if necessary) $\rightarrow$ \texttt{Remove Results} (if necessary) $\rightarrow$ re-\texttt{Run}(if necessary) 
+
+
+% ------------------------------------------------
+%
+% Validate
+%
+% ------------------------------------------------
+\section{Validate Settings}
+
+The point of \texttt{Validate} is to test the MatchMakr settings before actually trying to perform the matchmaking.  \texttt{Validate} is easier to abort if the settings are incorrect because it doesn't actually perform matchmaking.  Therefore, we always recommend validating settings before selecting \texttt{Run}.  Validate can detect several errors.  The most commor errors are listed in Table \ref{tab:validationerrors}.  When validation returns an error, the data files and settings can be edited, then validation can be performed again.
+
+Example output from \texttt{Validate} is provided in Figure \ref{fig:validationanatomy}.  Note that not all output is an error.  Some output is simply a list of settings.
+
+Validation will output the number of students and faculty found.  Ensure that these number match the expected numbers of students and faculty.  If someone does not fill out the survey and is not anyone else's choice, then that person may not appear in any document.  In this case, MatchMakr cannot detect the missing person's existence.  Manually add that person to the data  files and re-validate to ensure that the person is detected by MatchMakr.
+
+
+% ------------------------------------------------
+%
+% Validation figure
+%
+% ------------------------------------------------
+\begin{figure}
+	\centering
+	\includegraphics[scale=\scalefactor]{validation_anatomy.png}
+	\caption{\label{fig:validationanatomy} The output of MatchMakr validation}
+\end{figure}
+
+
+% ------------------------------------------------
+%
+% Validate errors table
+%
+% ------------------------------------------------
+\begin{table}[h!]
+	\centering
+	\begin{tabular}{| p{0.3\textwidth} | p{0.3\textwidth} | p{0.3\textwidth} |}
+		\hline
+		
+		% Title
+		\textbf{Error:} & \textbf{Causes:} & \textbf{Solutions:}\\ \hline \hline
+		
+		% 1.
+		\multirow{\texttt{filename} is not on path \texttt{Path}}
+			
+			\multientry{\texttt{Path} was not specified correctly in \texttt{Settings}}
+				{Change \texttt{Settings} $\rightarrow$ \texttt{Path} to the correct path}
+				
+			\multiending{\texttt{filename} was not specified correctly in \texttt{Settings}}
+				{Change the file name to the correct file name in \texttt{Settings}}
+				
+		% 2.
+		\multirow{Full Name data not found for \texttt{Group}}
+			
+			\multiending{\texttt{student\_preferences.csv} or \texttt{faculty\_preferences.csv}
+				does not contain a column called ``Full Name''}
+				{Add a column called ``Full Name'' to \texttt{student\_preferences.csv} or \texttt{faculty\_preferences.csv} and concatenate the last name and first name into it.
+				See the chapter on Processing Preference Data for more information.}
+				
+		% 3.
+		\multirow{\pb{There are duplicate faculty \\
+						or \\
+						There are duplicate students \\
+						(Names will be listed)}}
+			
+			\multiending{At least one student or faculty member completed more than one survey}
+						{Look for duplicate entries by listed people in \texttt{student\_preferences.csv} and \texttt{faculty\_preferences.csv}}
+						
+		% 4.
+		\multirow{\pb{Student Names not Found \\
+						 or \\
+						Faculty Names not Found \\
+						(Names will be listed)}}
+			
+			\multientry{The listed people switched first and last names}
+						{Switch the first and last names of the listed people in \texttt{student\_preferences.csv} and \texttt{faculty\_preferences.csv}}
+						
+			\multientry{The listed people used a name for the survey that was different than the name used for the application (preferred name, hyphenated last name, typo etc...)}
+						{Correct the listed names in the survey in \texttt{student\_preferences.csv} and \texttt{faculty\_preferences.csv}}
+						
+			\multientry{The listed people canceled, and will not be attending}
+						{Remove the listed people  from \texttt{student\_preferences.csv} and \texttt{faculty\_preferences.csv}.  See the chapter on Processing Preference Data for more information.}
+						
+			\multiending{The listed people did not fill out the survey}
+						{Add the listed people to \texttt{student\_preferences.csv} or \texttt{faculty\_preferences.csv}.  See the chapter on Processing Preference Data for more information.}
+						
+		% 5.
+		\multirow{\pb{The availability data does not match the the preference data for file: \texttt{filename} }}
+			
+			\multiending{People that filled out the survey do not appear in the availability file listed.}
+						{Recreate the availability file listed making sure that everyone who appears in the preference data appears in the availability data.  See the chapter on Processing Preference Data for more information.}
+			
+			
+			
+		
+		
+			
+		
+		\hline
+		%\tabline{}
+		%	{\pb{The file given by \texttt{filename} doesn't have the expected}}
+		
+	\end{tabular}
+	\caption{\label{tab:validationerrors} Summary of common validation errors}
+\end{table}
+
+
+% ------------------------------------------------
+%
+% Running
+%
+% ------------------------------------------------
+\section{Running MatchMakr}
+
+We recommend validating settings before running MatchMakr.  For instructions on how to validate the settings, see the section on how to Validate Settings.
+
+To begin the matchmaking process, click on \texttt{Run} $\rightarrow$ \textt{Run}.  To interrupt the matchmaking process, click on \texttt{Run} $\rightarrow$ \textt{Interrupt}.  Note that matchmaking is a CPU-intensive process.  We recommend opening \texttt{Task Manager} or a similar program to monitor CPU use.  As long as CPU usage is at or near 100\%, matchmaking is occuring.  During the matchmaking process, the computer may freeze.  This is normal.
+
+
+\begin{figure}
+	\centering
+	\includegraphics[scale=\scalefactor]{running.png}
+	\caption{\label{fig:running} Example of MatchMakr output during matchmaking}
+\end{figure}
+
+\subsection{Output to screen}
+Please see Figure \ref{fig:running} for an example of MatchMakr output during matchmaking.
+
+\subsubsection{Objective function}
+During matchmaking, MatchMakr prints out the current value of the objective function.  As this number increases, matchmaking is improving.
+
+\subsubsection{Fraction of preferences met}
+In \texttt{Advanced Settings}, the parameters \texttt{Check Frequency} and \texttt{Number of preferences to check} have been specified.  These parameters determine how frequently MatchMakr checks the number of preferences that have been met and how many preferences to check.  By default, MatchMakr prints out the percentage of preferences that have been met every 100 epochs.  By default, MatchMakr prints out the percentages of the top five preferences that have been met.  So, if MatchMakr prints out:
+
+
+Fraction of student preferences met: \\
+\left[1.0, 0.95, 0.8, 0.75, 0.77\right]
+
+
+MatchMakr is indicating that 100\% of students' first choices were met, as well as 95\% of second choices, 80\% of third choices, 75\% of fourth choices, and 77\% of fifth choices.
+
+MatchMakr always checks the number of preferences that have been met at the end of matchmaking.
+
+\subsubsection{Quality of final solution}
+When MatchMakr completes, it prints out a word to indicate the quality of the final solution.  This word can either be \texttt{OPTIMAL}, which means that there is no better set of matches, \texttt{FEASIBLE}, which means that the matches that MatchMakr made could be the best possible set of matches, or \texttt{INFEASIBLE}, which means that MatchMakr failed to make good matches.  Most matches will be \texttt{FEASIBLE}, and this is considered to be a good result.  If the solution is \texttt{INFEASIBLE}, then the data must be analyzed to determine why matches could not be made.
+
+\subsubsection{Schedules respected}
+At the end of matchmaking, MatchMakr prints out a list of people who are scheduled for interviews when they are unavailable.  This has never been observed when matchmaking has been allowed to complete without interruption.  Note that MatchMakr cannot detect data entry errors, and final schedules should be analyzed to ensure that schedule entry was correct.
+
 
 \section{Checking Results}
+
+Once matchmaking has completed, MatchMakr will create \texttt{.pdf} files in the folders specified in \texttt{Settings} $\rightarrow$ \texttt{Student Schedules Folder Name} and \texttt{Settings} $\rightarrow$ \texttt{Faculty Schedules Folder Name}.  The \texttt{.pdf} documents should be analyzed to ensure that matchmaking errors did not occur.
+
+\begin{enumerate}
+	\item Confirm that the number of schedules in each folder matches the number of people expected to attend interviews.  If the numbers do not match:
+		\begin{itemize}
+			\item Find the missing people
+			\item Add their names to to the input files
+			\item Validate and Run MatchMakr again
+		\end{item}
+	\item For each person who has scheduling conflicts, confirm that their schedules have been respected.  If schedules have not been respected:
+		\begin{itemize}
+			\item Confirm from the text output of MatchMakr that it thinks schedules have been respected
+			\item If MatchMakr thinks schedules were respected, check the availability files for data entry errors
+			\item If MatchMakr knows that schedules were not respected, matchmaking failed, probably because it was interrupted.  Re-run MatchMakr.
+		\end{itemize}
+	\item Check that the data makes sense
+		\begin{itemize}
+			\item If MatchMakr says that 100\% of people got their first choice, are there people who did not get their first choice.  If so:
+				\begin{itemize}
+					\item There was a data entry error.  Check the input files to make sure they are in the correct format
+			\end{itemize}
+		\end{itemize}
+\end{enumerate}
+

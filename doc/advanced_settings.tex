@@ -1,38 +1,258 @@
 \chapter{Advanced Settings}
 
+
+\renewcommand{\arraystretch}{1}
+\renewcommand{\pb}[1]{\parbox[t]{0.15\textwidth}{#1}}
+
+
+
+
+
+% ------------------------------------------------
+%
+% Introduction
+%
+% ------------------------------------------------
+Please refer to Figure \ref{fig:advanced_settings} for a visual representation of the settings.  A description of all settings is given in Table \ref{tab:advanced_settings}.  A description of all button functions is provided in Table \ref{tab:settings_buttons}.
+
+
+
+% ------------------------------------------------
+%
+% Figure
+%
+% ------------------------------------------------
 \begin{figure}
 	\centering
 	\includegraphics[scale=\scalefactor]{advanced_settings.png}
-	\caption{\label{fig:settings} MatchMakr Advanced Settings}
+	\caption{\label{fig:advanced_settings} MatchMakr advanced settings}
 \end{figure}
 
-\begin{table}[h!]
+
+% ------------------------------------------------
+%
+% Parameter Description
+%
+% ------------------------------------------------
+\begin{table}
 	\centering
-	\begin{tabular}{| l | l | p{2in} |}
+	\begin{tabular}[t]{| p{.15\textwidth} | p{.15\textwidth} | p{.65\textwidth} |}
 	
-		% Header
-		\tabheaderthree{Setting:}{Possible Values:}{Notes:}
-		
-		% Questions
-		\tablinethree{Log Name}{}{}				
-		\tablinethree{Matches File Name}{}{}	
-		\tablinethree{Use Ranking}{}{}	
-		\tablinethree{Use Student Availability}{}{}	
-		\tablinethree{Use Faculty Availability}{}{}	
-		\tablinethree{Print Student Match Quality}{}{}	
-		\tablinethree{Print Faculty Match Quality}{}{}	
-		\tablinethree{Use Interview Limits}{}{}	
-		\tablinethree{Choice Exponent}{}{}	
-		\tablinethree{Lunch Penalty}{}{}
-		\tablinethree{Lunch Period}{}{}
-		\tablinethree{Recruiting Weight}{}{}
-		\tablinethree{Track Weight}{}{}
-		\tablinethree{Faculty Similarity Weight}{}{}
-		\tablinethree{Number of Similar Faculty}{}{}
-		\tablinethree{Number of Preferences to Check}{}{}
-		\tablinethree{Check Frequency}{}{}
-		\tablinethree{Empty Penalty}{}{}
+			% Header
+			\tabheaderthree{Setting:}{\pb{Possible \\Values: \\}}{Notes:}
+			
+			% Questions
+			\tablinethree{Log Name}{Any valid \texttt{.txt} file name}
+							{The name of the log file.  The name should end with \texttt{.txt}}			
+			\tablinethree{Matches File Name}{Any valid file name}
+							{The root of the name of the files where matchmaking summaries will be stored.  The name should not include a file extension.}		
+			\tablinethree{Use Ranking}{True / False}
+							{Rank preferences instead of using binary preferences.  Binary preferences take the form:``Do you want to meet with this person (Yes/No)''}		
+			\tablinethree{Use Student Availability}{True / False}
+							{If some students are unavailable during certain interviews, check this box and define the student availability file (\texttt{student\_availability.csv}, by default)}		
+			\tablinethree{Use Faculty Availability}{True / False}
+							{If some faculty are unavailable during certain interviews, check this box and define the faculty availability file (\texttt{faculty\_availability.csv}, by default)}	
+			\tablinethree{Print Student Match Quality}{True / False}
+							{On the student schedules, print if each match was ``Strong,'' ``Moderate,'' or ``Informational'' (poor)}
+			\tablinethree{Print Faculty Match Quality}{True / False}
+							{On the faculty schedules, print if each match was ``Strong,'' ``Moderate,'' or ``Informational'' (poor)}		
+			\tablinethree{Use Interview Limits}{True / False}
+							{Apply limits to the minimum and maximum number of interviews that can be assigned to a person.  These limits are specified in \texttt{Settings} in the \texttt{Minimum Number of Interviews} and \texttt{Maximum Number of Interviews} properties}		
+			\tablinethree{Choice Exponent}{0 - 10}
+							{A factor affecting how much first preferences are weighted over last preferences.  For more information, see note on Weights, below.}		
+			\tablinethree{Lunch Penalty}{0 - 9999999}
+							{If an optional lunch break is available, the weight applied to giving the faculty his/her preference to interview during the break. Set to 0 (default) to not allow an optional break.}	
+			\tablinethree{Lunch Period}{0 - 99}
+							{If an optional lunch break is available (\texttt{Lunch Penalty} $ > 0$), what interview period contains this lunch break.}
+			\tablinethree{Recruiting Weight}{0 - 9999999}
+							{The weight applied to giving recruiting faculty an advantage over non-recruiting faculty when being assigned preferences.  Set to 0 to give recruiting faculty no advantage.  Note that faculty that answered ``Maybe'' for ``Are you recruiting'' are assigned less weight than faculty that answered ``Yes.''  For more information, see note on Weights, below.}	
+			\tablinethree{Track Weight}{0 - 9999999}
+							{The weight applied to assigning sub-optimal matches based on similar interests.  Set to 0 to  turn off matchmaking based on tracks.  Note that this weight improves matchmaking for people who couldn't be assigned their top choices.  For more information, see note on Weights, below.}	
+			\tablinethree{Faculty Similarity Weight}{0 - 9999999}
+							{The weight applied to assigning sub-optimal matches based on faculty similarity.  Students who are not able to be assigned their top preferences will be assigned other faculty who are similar to the faculty that the students selected as their top choices.  Set to 0 to give turn off matchmaking based on faculty similarity.  Note that this weight improves matchmaking for people who couldn't be assigned their top choices.  For more information, see note on Weights, below.}	
+			\tablinethree{Number of Similar Faculty}{0 - 99}
+							{The number of faculty that other faculty can select as being similar}	
+			\tablinethree{Number of Preferences to Check}{0 - 99}
+							{MatchMakr checks to see if the top preferences have been satisfied and prints this number out on the screen.  This number specifies the number of top choices that should be checked.  This number does not affect matchmaking, but it does affect how results are reported during fitting.}	
+			\tablinethree{Check Frequency}{1 - 10000}
+							{MatchMakr checks to see if the top preferences have been satisfied and prints this number out on the screen.  This parameter determines how frequently MatchMakr performs this check.  Low numbers cause MatchMakr to run slowly because it performs many checks.  This number does not affect matchmaking, but it does affect how results are reported during fitting.}	
+			\tablinethree{Empty Penalty}{0 - 9999999}
+							{The weight given to ensuring that MatchMakr does not assign empty slots to people.  That is, if an interview should be assigned, MatchMakr should assign an interview.  This parameter is unstable, and we recommend leaving it at 0}	
+							
 		
 	\end{tabular}
 	\caption{\label{tab:advanced_settings} MatchMakr Advanced Settings}
 \end{table}	
+
+
+% ------------------------------------------------
+%
+% Button Function Description
+%
+% ------------------------------------------------
+\buttontable
+
+
+% ------------------------------------------------
+%
+% Notes
+%
+% ------------------------------------------------
+\section{Notes}
+
+\subsection{Choice Exponent}
+Let $n$ be the number of interview slots.  Let $f_s$ be the ranked preference of faculty member F for a match with student S.  Let $s_f$ be the ranked preference of a student S for a match with faculty member F.  If F is S's first choice and S is F's first choice, then:
+\begin{equation}
+	\begin{aligned}
+		f_s = 1 \\
+		s_f = 1
+	\end{aligned}
+\end{equation}
+
+Likewise, If F is S's second choice and S is F's third choice, then:
+\begin{equation}
+	\begin{aligned}
+		f_s = 3 \\
+		s_f = 2
+	\end{aligned}
+\end{equation}
+
+Let $\alpha$ be a free parameters such that:
+\begin{equation}
+	\begin{aligned}
+		0 \le \alpha \le 1 \\
+	\end{aligned}
+\end{equation}
+Note that $(\alpha * 100)$ is the \texttt{Faculty Advantage Factor}
+
+Let the $c$ be the choice exponent.  MatchMakr calculates the value, $v$, of a match using the following formula:
+\begin{equation}
+	\label{eq:value}
+	\begin{aligned}
+		v = \left( (\alpha * (n - f_s + 1))^c + ((1-\alpha) * (n - s_f + 1))^c  \right) * 100\\
+	\end{aligned}
+\end{equation}
+
+For:
+\begin{equation}
+	\label{eq:n}
+	\begin{aligned}
+		n \ge f_s \\
+		n \ge s_f  
+	\end{aligned}
+\end{equation}
+
+Note that the factor of 100 in Equation \ref{eq:value} helps MatchMakr perform optimization on integers.
+
+Thus, we can see that $c$ is the an exponent. The first choice is ranked exponentially higher than the second choice.  $c$ controls the difference between the first choice and the second choice.
+
+\pagebreak
+\subsection{Weights}
+
+This section will discuss how to set the following weights:
+\begin{itemize}
+	\item \texttt{Recruiting Weight}
+	\item \texttt{Track Weight}
+	\item \texttt{Faculty Similarity Weight}
+	\item \texttt{Lunch Penalty}
+	\item \texttt{Empty Penalty}
+\end{itemize}
+
+We can get reasonable values for all these weights using the same methods.  Note that, if we don't wish to use any features controlled by these weights, we can just set the corresponding weights to 0.
+
+To begin the process, let's look at Equation \ref{eq:value}.  To make our analysis easier, we will start by setting $\alpha = 1$.  This means that we will only consider faculty preferences.  The resulting equation is:
+
+\begin{equation}
+	\begin{aligned}
+		v = 100 (n - f_s + 1)^c  \\
+	\end{aligned}
+\end{equation}
+
+Suppose that, for our particular problem there are 9 interview slots ($n=9$).  Suppose that we also want there to be a large difference between the weight for the first preference and the weight of the second preference.  In this case, we can set $c=4$.  Plugging these values in, we see that
+\begin{equation}
+	\begin{aligned}
+		v = 100 (11 - f_s)^4  \\
+	\end{aligned}
+\end{equation}
+
+Recall that $f_s$ is the ranked preference of faculty member F for student S.  From Equation \ref{eq:n}, we see that $f_s$ can take on any value between 0 and $n$, where $n$ is the total number of interview slots.  We can plug in all values of $f_s$ and solve the equation.  Again, assuming that $n=9$, we get the following values:
+
+\begin{table}[h!]
+	\centering
+	\begin{tabular}{| r | r|}
+		\hline
+		\textbf{Preference $f_s$} & \textbf{Value $v$} \\ \hline \hline
+		
+		1 & 656100 \\ 
+		2 & 409600 \\ 
+		3 & 240100 \\ 
+		4 & 129600 \\ 
+		5 & 62500 \\ 
+		6 & 25600 \\ 
+		7 & 8100 \\ 
+		8 & 1600 \\ 
+		9 & 100 \\ \hline
+		
+	\end{tabular}
+	\caption{\label{tab:values} MatchMakr value for different preference numbers}
+\end{table}
+
+The default \texttt{Track Weight} is 30000.  In this example, we see that this weight is slightly more than giving a faculty member his/her $6^{th}$ choice, but not quite as high as giving a faculty member his/her $5^{th}$ choice.
+
+Using this same method, we can choose weights based on how important we think factors are.  To start off, we suggest setting the weight like in this example (between the weights for the $5^{th}$ and $6^{th}$ choices), and then adjusting the weights, as necessary.  The only exception to this method is the \texttt{Empty Penalty}.  Because that penalty is unstable, we recommend setting it to 0.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
