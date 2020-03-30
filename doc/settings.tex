@@ -3,13 +3,40 @@
 
 Please refer to Figure \ref{fig:settings} for a visual representation of the settings.  A description of all settings is given in Table \ref{tab:settings}.  A description of all button functions is provided in Table \ref{tab:settings_buttons}.
 
+% ------------------------------------------------
+%
+% Button Descriptions
+%
+% ------------------------------------------------
+
+\newcommand{\buttontable}
+	{
+		\begin{table}[h!]
+			\centering
+			\begin{tabular}[t]{| p{2in} | p{2.1in} |}
+			
+				% Header
+				\hline \textbf{Button:} & \textbf{Function:} \\ \hline \hline
+				
+				% Questions
+				Load Settings & Load settings from a \texttt{.yaml} file.  This loads both basic and advanced settings \\ \hline
+				Save Settings & Save settings to a \texttt{.yaml} file.  This saves both basic and advanced settings \\ \hline				
+				
+				
+			\end{tabular}
+			\caption{\label{tab:settings_buttons} Functions of MatchMakr settings buttons}
+		\end{table}	
+	}
+	
+\buttontable
+
 
 % ------------------------------------------------
 %
 % Figure
 %
 % ------------------------------------------------
-\begin{figure}[h!]
+\begin{figure}
 	\centering
 	\includegraphics[scale=\scalefactor]{settings.png}
 	\caption{\label{fig:settings} MatchMakr Settings}
@@ -20,7 +47,7 @@ Please refer to Figure \ref{fig:settings} for a visual representation of the set
 % Parameter Descriptions
 %
 % ------------------------------------------------
-\begin{table}[h!]
+\begin{table}
 	\centering
 	\begin{tabular}[t]{| p{2in} | p{2.1in} | p{2.5in} |}
 	
@@ -47,18 +74,18 @@ Please refer to Figure \ref{fig:settings} for a visual representation of the set
 		\tablinethree{Student Schedules Folder Name}{Any valid folder name}
 						{The folder where the student schedule \texttt{.pdf} files will be output.  This is a subfolder of \texttt{Results} (specified above)}	
 		\tablinethree{Faculty Schedules Folder Name}{Any valid folder name}
-						{he folder where the faculty schedule \texttt{.pdf} files will be output.  This is a subfolder of \texttt{Results} (specified above)}		
+						{The folder where the faculty schedule \texttt{.pdf} files will be output.  This is a subfolder of \texttt{Results} (specified above)}		
 		\tablinethree{Number of Interview}{0 - 99}
 						{The number of interview slots that are available.}		
 		\tablinethree{Minimum Number of Interviews}{0 - (Number of Interviews)}
-						{The minimum number of interview slots that someone can be scheduled for.  If someone is available for fewer interview slots than \texttt{Minimum Number of Interviews}, then the person will be assigned the number of interviews that they are available for.}		
+						{The minimum number of interview slots that someone can be scheduled for.  If someone is available for fewer interview slots than \texttt{Minimum Number of Interviews}, then the person will be assigned, at most, the number of interviews that they are available for.}		
 		\tablinethree{Maximum Number of Interviews}
 						{\pbthreelarge{(Minimum Number of Interviews) \\- (Number of Interviews)}}
 						{The maximum number of interview slots that someone can be scheduled for}	
 		\tablinethree{Recommend Extra Matches}{0 - 99}
 						{Number of extra matches to recommend.  This helps people find good matches that could not be scheduled and explore those matches outside of scheduled time.}	
 		\tablinethree{Faculty Advantage Factor}{0 - 100}
-						{A value of 50 weights student and faculty preferences equally.  A value of 100 causes MatchMakr to only consider faculty preferences and not consider student preferences.  A value of 0 causes MatchMakr to only consider student preferences and not consider faculty preferences. Changing this parameter can improve matches}					
+						{A value of 50 weights student and faculty preferences equally.  A value of 100 causes MatchMakr to only consider faculty preferences and not consider student preferences.  A value of 0 causes MatchMakr to only consider student preferences and not consider faculty preferences. Changing this parameter can improve matches.}					
 		
 		
 	\end{tabular}
@@ -66,28 +93,4 @@ Please refer to Figure \ref{fig:settings} for a visual representation of the set
 \end{table}	
 
 
-% ------------------------------------------------
-%
-% Button Descriptions
-%
-% ------------------------------------------------
-\newcommand{\buttontable}
-	{
-		\begin{table}[h!]
-			\centering
-			\begin{tabular}[t]{| p{2in} | p{2.1in} |}
-			
-				% Header
-				\hline \textbf{Button:} & \textbf{Function:} \\ \hline \hline
-				
-				% Questions
-				Load Settings & Load settings from a \texttt{.yaml} file.  This saves both basic and advanced settings \\ \hline
-				Save Settings & Save settings to a \texttt{.yaml} file.  This loads both basic and advanced settings \\ \hline				
-				
-				
-			\end{tabular}
-			\caption{\label{tab:settings_buttons} Functions of MatchMakr settings buttons}
-		\end{table}	
-	}
-	
-\buttontable
+

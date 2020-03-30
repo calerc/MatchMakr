@@ -2,7 +2,20 @@
 
 The Google Form puts most of the data in the correct format.  However, we must do a little bit of preprocessing before we feed the data into MatchMaker.  If we miss a step, it's okay.  MatchMakr can catch most errors and fix them automatically.
 
-Example files can be found on the MatchMaker \href{\website}{website}
+Example files can be found on the MatchMaker \href{\website}{website} and also in Figure \ref{fig:example_preference_data}.
+
+\section{Prerequisites}
+
+In order to process the preference data, we need to have:
+\begin{enumerate}
+	\item List of students
+	\item List of faculty
+	\item List of students that have canceled
+	\item List of faculty that have canceled
+\end{enumerate}
+
+\section{Processing the Data}
+
 
 The following steps should be performed on both the faculty and student preference data:
 \begin{enumerate}
@@ -10,10 +23,10 @@ The following steps should be performed on both the faculty and student preferen
 	\item Because the file is a \texttt{.csv}, you will have to import it when the import box pops up
 		\begin{itemize}
 			\item Select the following separators
-				\begin{enumerate}
+				\begin{itemize}
 					\item comma (,)
-					\item other, and then type in brackets([])
-				\end{enumerate}
+					\item other, and then type in brackets([ ])
+				\end{itemize}
 			\item Leave the rest of the settings as their defaults
 		\end{itemize}
 	\item To prevent data import in the future, save the preference files as \texttt{.xlsx}
@@ -24,7 +37,7 @@ The following steps should be performed on both the faculty and student preferen
 		\begin{itemize}
 			\item Example: If you replaced ``Track'' with ``Common Interest'' when creating questions for the survey, now change ``Common Interest'' back to ``Track''
 		\end{itemize}
-	\item Insert a new column to the right of the ``Last Name'' column
+	\item Insert a new column to the right of the ``First Name'' column
 	\item Title the new column ``Full Name''
 	\item Concatenate the last names and first names:
 		\begin{itemize}
@@ -37,7 +50,7 @@ The following steps should be performed on both the faculty and student preferen
 	\item To the bottom of the spreadsheet, add the names of anyone who did not fill out the survey
 		\begin{itemize}
 			\item If you don't have a list of people who didn't fill out the survey, MatchMakr can detect this in many circumstances.  See the chapter on Validating Settings and Running MatchMakr
-			\item If you know any information about missing names, add it to the spreadsheet (e.g., faculty tracks)
+			\item If you know any information about missing people, add it to the spreadsheet (e.g., faculty tracks)
 		\end{itemize}
 	\item Check the names for common mistakes and fix them
 		\begin{itemize}
@@ -50,17 +63,21 @@ The following steps should be performed on both the faculty and student preferen
 		\begin{itemize}
 			\item Go to \texttt{Data} $\rightarrow$ \texttt{Sort}
 			\item Select \texttt{My data has column headers}
-			\item Sort by:
+			\item Sort (in order listed below) by:
 				\begin{enumerate}
 					\item Full Name
 					\item Timestamp
 				\end{enumerate}
 		\end{itemize}
-	\item Remove duplicate entries
-	\item Remove all instances of names of people who are no longer attending
+	\item Remove duplicate responses
 		\begin{itemize}
-			\item Remove survey results (rows) from these people
-			\item Remove the names of these people anywhere they appear in \textbf{BOTH} preference spreadsheets
+			\item Assume that the last response is the correct one
+			\item If the data is sorted correctly, remove the first entries in the spreadsheet
+		\end{itemize}
+	\item Remove all instances of names of people who are no longer attending interviews
+		\begin{itemize}
+			\item Remove survey responses (rows) from these people
+			\item Remove the names of these people anywhere they appear in \textbf{both} preference spreadsheets
 			\item If the names appear in ranked lists, move lower-ranked entries up to fill the space
 				\begin{itemize}
 					\item As example, if a person who canceled was someone's ninth choice, replace the name of the cancel-ee with the tenth choice
