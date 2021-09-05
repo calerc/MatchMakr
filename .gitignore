@@ -3,7 +3,8 @@ MatchMakr.spec
 data/results
 .spyproject
 video
-
+*.png
+*.svg
 
 
 
