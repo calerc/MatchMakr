@@ -5,7 +5,7 @@ data/results
 video
 *.png
 *.svg
-
+setup/venv
 
 
 
